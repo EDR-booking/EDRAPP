@@ -1,0 +1,118 @@
+// English translations
+Map<String, String> enUS = {
+  // Common
+  'app_name': 'Train Ticket Booking',
+  'welcome': 'Welcome',
+  'hello': 'Hello',
+  'ok': 'OK',
+  'cancel': 'Cancel',
+  'yes': 'Yes',
+  'no': 'No',
+  'save': 'Save',
+  'next': 'Next',
+  'back': 'Back',
+  'close': 'Close',
+  
+  // Authentication
+  'login': 'Login',
+  'sign_up': 'Sign Up',
+  'email': 'Email',
+  'password': 'Password',
+  'forgot_password': 'Forgot Password?',
+  'enter_email': 'Enter your email',
+  'enter_password': 'Enter your password',
+  'verify_email': 'Verify Email',
+  'otp_sent': 'OTP has been sent to your email',
+  'email_verification': 'Email Verification',
+  'enter_email_address': 'Enter your email address',
+  'email_required': 'Email is required',
+  'enter_valid_email': 'Please enter a valid email',
+  
+  // OTP
+  'otp_verification': 'OTP Verification',
+  'enter_otp': 'Enter OTP',
+  'verification_code_sent': 'We have sent a verification code to',
+  'verify': 'Verify',
+  'resend_otp': 'Resend OTP',
+  'expires_in': 'Expires in',
+  'invalid_otp': 'Invalid OTP. Please try again.',
+  
+  // Personal Information
+  'personal_information': 'Personal Information',
+  'first_name': 'First Name',
+  'last_name': 'Last Name',
+  'phone_number': 'Phone Number',
+  'citizenship': 'Citizenship',
+  'country': 'Country',
+  'enter_first_name': 'Enter your first name',
+  'enter_last_name': 'Enter your last name',
+  'enter_phone_number': 'Enter your phone number',
+  'select_citizenship': 'Select your citizenship',
+  'select_country': 'Select your country',
+  'ethiopian': 'Ethiopian',
+  'foreigner': 'Foreigner',
+  'first_name_required': 'First name is required',
+  'last_name_required': 'Last name is required',
+  'phone_required': 'Phone number is required',
+  'valid_phone_required': 'Please enter a valid phone number',
+  
+  // Passport
+  'passport_number': 'Passport Number',
+  'enter_passport_number': 'Enter your passport number',
+  'passport_number_required': 'Passport number is required',
+  
+  // Home
+  'home': 'Home',
+  'profile': 'Profile',
+  'settings': 'Settings',
+  'search': 'Search',
+  
+  // Tickets
+  'tickets': 'Tickets',
+  'book_ticket': 'Book Ticket',
+  'my_tickets': 'My Tickets',
+  'ticket_details': 'Ticket Details',
+  'from': 'From',
+  'to': 'To',
+  'departure': 'Departure',
+  'arrival': 'Arrival',
+  'date': 'Date',
+  'time': 'Time',
+  'passengers': 'Passengers',
+  'price': 'Price',
+  'booking_date': 'Booking Date',
+  'train_schedule': 'Train Schedule',
+  'ticket_booking': 'Ticket Booking',
+  'nationality': 'Nationality',
+  'Ethiopian': 'Ethiopian',
+  'Foreign': 'Foreign',
+  'Djiboutian': 'Djiboutian',
+  'forward_direction_days': 'Forward direction: Even-numbered days only',
+  'backward_direction_days': 'Backward direction: Odd-numbered days only',
+  'select_valid_stations': 'Please select valid departure and arrival stations',
+  
+  // Services
+  'services': 'Services',
+  'recommended': 'Recommended',
+  'popular': 'Popular',
+  
+  // Settings
+  'language': 'Language',
+  'select_language': 'Select Language',
+  'theme': 'Theme',
+  'dark_mode': 'Dark Mode',
+  'light_mode': 'Light Mode',
+  'notifications': 'Notifications',
+  'about': 'About',
+  'help': 'Help',
+  'general': 'General',
+  'account': 'Account',
+  
+  // Localization Demo
+  'localization_demo': 'Localization Demo',
+  'current_language': 'Current Language',
+  'common_phrases': 'Common Phrases',
+  'navigation': 'Navigation',
+  'tickets_and_booking': 'Tickets and Booking',
+  'change_language': 'Change Language',
+};

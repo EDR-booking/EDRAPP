@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "279745382016",
+    "project_id": "edr-ticket",
+    "storage_bucket": "edr-ticket.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:279745382016:android:b8f9a6cbf82bef947ac865",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDC5x9SZcYb7-3oONrRZb36NzfS2usM26I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
