@@ -1,4 +1,4 @@
-import 'dart:convert';
+// Removed unused import
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -36,25 +36,14 @@ class QRGeneratorService {
     }
   }
 
-  // Generate QR code data based on ticket information
+  // Generate QR code data with ONLY the ticket ID
   static Future<String> generateQRData(String ticketId, String firstName, String lastName, 
       String departure, String arrival, DateTime date) async {
     // Update ticket status in Firebase
     await updateTicketStatus(ticketId);
     
-    // Create a simple map with essential ticket data - using ticketId directly
-    final Map<String, dynamic> ticketData = {
-      'id': ticketId,
-      'firstName': firstName,
-      'lastName': lastName,
-      'departure': departure,
-      'arrival': arrival,
-      'date': date.millisecondsSinceEpoch,
-      'issuedAt': DateTime.now().millisecondsSinceEpoch,
-    };
-    
-    // Convert to JSON string and encode to base64 for security
-    return base64Encode(utf8.encode(jsonEncode(ticketData)));
+    // Return ONLY the ticket ID - maximum simplicity
+    return ticketId;
   }
   
   // Generate a QR code widget with the provided data

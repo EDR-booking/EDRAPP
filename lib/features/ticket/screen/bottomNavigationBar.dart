@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_2/features/ticket/controllers/bottomNavController.dart';
 import 'package:flutter_application_2/features/ticket/screen/ticketScreen.dart';
+import 'package:flutter_application_2/features/ticket/screen/my_ticket_screen.dart';
 import 'package:flutter_application_2/features/service_recommendation/screens/service_recommendation_screen.dart';
 import 'package:flutter_application_2/features/settings/screens/settings_screen.dart';
 import 'package:get/get.dart';
-import 'package:flutter_application_2/home.dart';
 import 'dart:ui';
 
 class CustomBottomNavigationBar extends StatelessWidget {
@@ -16,7 +16,7 @@ class CustomBottomNavigationBar extends StatelessWidget {
 
   late final List<Widget> screens = [
     TicketScreen(selectedCitizenship: selectedCitizenship),
-    const Home(),
+    const MyTicketScreen(),
     const ServiceRecommendationScreen(),
     const SettingsScreen(),
   ];
@@ -71,13 +71,13 @@ class CustomBottomNavigationBar extends StatelessWidget {
                     _buildNavItem(
                       icon: Icons.confirmation_number_outlined,
                       selectedIcon: Icons.confirmation_number,
-                      label: 'Ticket',
+                      label: 'Book Ticket',
                       index: 0,
                     ),
                     _buildNavItem(
-                      icon: Icons.home_outlined,
-                      selectedIcon: Icons.home,
-                      label: 'Home',
+                      icon: Icons.qr_code_scanner_outlined,
+                      selectedIcon: Icons.qr_code_scanner,
+                      label: 'My Ticket',
                       index: 1,
                     ),
                     _buildNavItem(
