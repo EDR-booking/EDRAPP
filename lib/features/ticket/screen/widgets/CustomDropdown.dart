@@ -1,5 +1,6 @@
 // A simplified and reliable dropdown implementation that works with Flutter's standard widgets
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class CustomDropdown extends StatefulWidget {
   final List<String> items;
@@ -75,8 +76,16 @@ class _CustomDropdownState extends State<CustomDropdown> {
               color: widget.errorText != null 
                   ? Colors.red[700]! 
                   : isDarkMode ? Colors.grey[600]! : Colors.grey[300]!,
-              width: 1,
+              width: widget.errorText != null ? 2 : 1, // Thicker border for error state
             ),
+            // Add subtle shadow effect when there's an error
+            boxShadow: widget.errorText != null ? [
+              BoxShadow(
+                color: Colors.red.withOpacity(0.1),
+                blurRadius: 8,
+                spreadRadius: 1,
+              ),
+            ] : null,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: DropdownButtonHideUnderline(
@@ -131,23 +140,48 @@ class _CustomDropdownState extends State<CustomDropdown> {
                 );
               }).toList(),
               onChanged: (value) {
+                // Play a subtle haptic feedback when selection changes
+                HapticFeedback.selectionClick();
+                
                 setState(() {
                   _selectedValue = value;
                 });
                 widget.onChanged(value);
+                
+                // Add a slight delay to let the UI update before scrolling
+                Future.delayed(Duration(milliseconds: 50), () {
+                  // Ensure widget is still mounted
+                  if (mounted) {
+                    // Automatically scroll to next field if it's in a scrollable container
+                    Scrollable.ensureVisible(
+                      context,
+                      duration: Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                });
               },
             ),
           ),
         ),
         
-        if (widget.errorText != null) ...[
+        if (widget.errorText != null) ...[          
           const SizedBox(height: 4),
-          Text(
-            widget.errorText!,
-            style: TextStyle(
-              color: Colors.red[700]!,
-              fontSize: 12,
-            ),
+          Row(
+            children: [
+              Icon(Icons.error_outline, size: 14, color: Colors.red[700]),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  widget.errorText!,
+                  style: TextStyle(
+                    color: Colors.red[700]!,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ],

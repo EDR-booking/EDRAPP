@@ -328,44 +328,92 @@ class TicketController extends GetxController {
   }
 
   void nextPage() {
-    if (currentPage.value == 0 && _validateFirstStep()) {
-      print('=== Step 1 Values ===');
-      print('Departure Station: ${selectedDepartureStation.value}');
-      print('Arrival Station: ${selectedArrivalStation.value}');
-      print('Date: ${selectedDate.value}');
-      print('Citizenship: ${selectedCitizenship.value}');
+    try {
+      // First page - Station selection
+      if (currentPage.value == 0) {
+        if (_validateFirstStep()) {
+          print('=== Step 1 Values ===');
+          print('Departure Station: ${selectedDepartureStation.value}');
+          print('Arrival Station: ${selectedArrivalStation.value}');
+          print('Date: ${selectedDate.value}');
+          print('Citizenship: ${selectedCitizenship.value}');
+          
+          // Set values to controllers for other parts of the app
+          departureController.text = selectedDepartureStation.value!;
+          arrivalController.text = selectedArrivalStation.value!;
 
-      print('=== Step 1 Values ===');
-      if (selectedDepartureStation.value == null ||
-          selectedArrivalStation.value == null ||
-          selectedDate.value == null) {
-        Get.snackbar(
-          'Validation Error',
-          'Please fill in all required fields',
-          snackPosition: SnackPosition.TOP,
-        );
-        return;
+          // Update prices based on citizenship before moving to the next page
+          updatePricesBasedOnCitizenship();
+
+          // Move to next page
+          currentPage.value++;
+          
+          // Provide feedback
+          Get.snackbar(
+            'Step Completed',
+            'Station and date selection confirmed',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green.shade700,
+            colorText: Colors.white,
+            duration: Duration(seconds: 2),
+          );
+        }
+      } 
+      // Second page - User information
+      else if (currentPage.value == 1) {
+        if (_validateSecondStep()) {
+          print('=== Step 2 Values ===');
+          print('First Name: ${firstNameController.text}');
+          print('Last Name: ${lastNameController.text}');
+          print('Email: ${emailController.text}');
+          print('Phone: ${phoneController.text}');
+          
+          // Move to next page
+          currentPage.value++;
+          
+          // Provide feedback
+          Get.snackbar(
+            'Step Completed',
+            'Personal information saved',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green.shade700,
+            colorText: Colors.white,
+            duration: Duration(seconds: 2),
+          );
+        }
+      } 
+      // Third page - Seat selection
+      else if (currentPage.value == 2) {
+        if (_validateInputs()) {
+          print('=== Step 3 Values ===');
+          print('Seat Type: ${selectedSeatType.value}');
+          print('Bed Position: ${selectedBedPosition.value}');
+          print('Price: ${currentSeatPrice}');
+          
+          // Move to next page
+          currentPage.value++;
+          
+          // Provide feedback
+          Get.snackbar(
+            'Step Completed',
+            'Seat selection confirmed',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green.shade700,
+            colorText: Colors.white,
+            duration: Duration(seconds: 2),
+          );
+        }
       }
-      departureController.text = selectedDepartureStation.value!;
-      arrivalController.text = selectedArrivalStation.value!;
-
-      // Update prices based on citizenship before moving to the next page
-      updatePricesBasedOnCitizenship();
-
-      currentPage.value++;
-    } else if (currentPage.value == 1 && _validateSecondStep()) {
-      print('=== Step 2 Values ===');
-      print('First Name: ${firstNameController.text}');
-      print('Last Name: ${lastNameController.text}');
-      print('Email: ${emailController.text}');
-      print('Phone: ${phoneController.text}');
-      currentPage.value++;
-    } else if (currentPage.value == 2 && _validateInputs()) {
-      print('=== Step 3 Values ===');
-      print('Seat Type: ${selectedSeatType.value}');
-      print('Bed Position: ${selectedBedPosition.value}');
-      print('Price: ${currentSeatPrice}');
-      currentPage.value++;
+    } catch (e) {
+      print('Error in nextPage: $e');
+      Get.snackbar(
+        'Error',
+        'An error occurred when trying to proceed. Please try again.',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red.shade700,
+        colorText: Colors.white,
+        duration: Duration(seconds: 4),
+      );
     }
   }
 
@@ -387,52 +435,146 @@ class TicketController extends GetxController {
   }
 
   bool _validateFirstStep() {
-    if (selectedDepartureStation.value == null ||
-        selectedArrivalStation.value == null ||
-        selectedDate.value == null) {
+    bool isValid = true;
+    String errorMsg = '';
+    
+    // Check if departure station is selected
+    if (selectedDepartureStation.value == null) {
+      isValid = false;
+      errorMsg += 'Please select a departure station\n';
+    }
+    
+    // Check if arrival station is selected
+    if (selectedArrivalStation.value == null) {
+      isValid = false;
+      errorMsg += 'Please select an arrival station\n';
+    }
+    
+    // Check if stations are the same
+    if (selectedDepartureStation.value != null && 
+        selectedArrivalStation.value != null && 
+        selectedDepartureStation.value == selectedArrivalStation.value) {
+      isValid = false;
+      errorMsg += 'Departure and arrival stations cannot be the same\n';
+    }
+    
+    // Check if date is selected
+    if (selectedDate.value == null) {
+      isValid = false;
+      errorMsg += 'Please select a travel date';
+    }
+    
+    // Debug print
+    print('First step validation: $isValid');
+    if (!isValid) {
+      print('Validation errors: $errorMsg');
+    }
+    
+    // Show error message if validation fails
+    if (!isValid) {
       Get.snackbar(
         'Validation Error',
-        'Please fill in all required fields',
+        errorMsg.trim(),
         snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red.shade700,
+        colorText: Colors.white,
+        duration: Duration(seconds: 4),
+        margin: EdgeInsets.all(10),
       );
-      return false;
     }
-    return true;
+    
+    return isValid;
   }
 
   bool _validateSecondStep() {
-    if (firstNameController.text.isEmpty ||
-        lastNameController.text.isEmpty ||
-        emailController.text.isEmpty ||
-        phoneController.text.isEmpty) {
+    bool isValid = true;
+    String errorMsg = '';
+    
+    // Validate first name
+    if (firstNameController.text.isEmpty) {
+      isValid = false;
+      errorMsg += 'First name is required\n';
+    }
+    
+    // Validate last name
+    if (lastNameController.text.isEmpty) {
+      isValid = false;
+      errorMsg += 'Last name is required\n';
+    }
+    
+    // Validate email
+    if (emailController.text.isEmpty) {
+      isValid = false;
+      errorMsg += 'Email is required\n';
+    } else if (!GetUtils.isEmail(emailController.text)) {
+      isValid = false;
+      errorMsg += 'Please enter a valid email address\n';
+    }
+    
+    // Validate phone format - more flexible validation
+    if (phoneController.text.isEmpty) {
+      isValid = false;
+      errorMsg += 'Phone number is required\n';
+    } else if (phoneController.text.length < 9) {
+      isValid = false;
+      errorMsg += 'Phone number is too short\n';
+    }
+    
+    // Validate passport if foreign citizen
+    if (selectedCitizenship.value == 'Foreign' && passportController.text.isEmpty) {
+      isValid = false;
+      errorMsg += 'Passport number is required for foreign citizens';
+    }
+
+    // Show error message if validation fails
+    if (!isValid) {
       Get.snackbar(
         'Validation Error',
-        'Please fill in all required fields',
+        errorMsg.trim(),
         snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red.shade700,
+        colorText: Colors.white,
+        duration: Duration(seconds: 4),
+        margin: EdgeInsets.all(10),
       );
-      return false;
     }
-    return true;
+    
+    return isValid;
   }
-
+  
   bool _validateInputs() {
-    if (selectedSeatType.value == 'regular') {
-      // For regular seats, no bed position needed
-      return true;
-    } else if ((selectedSeatType.value == 'economic' ||
-            selectedSeatType.value == 'vip') &&
+    bool isValid = true;
+    String errorMsg = '';
+    
+    // Validate seat type selection
+    if (selectedSeatType.value.isEmpty) {
+      isValid = false;
+      errorMsg += 'Please select a seat type\n';
+    }
+
+    // If economic or VIP is selected, validate bed position
+    if ((selectedSeatType.value == 'economic' || selectedSeatType.value == 'vip') &&
         selectedBedPosition.value.isEmpty) {
-      // For economic or VIP seats, bed position is required
+      isValid = false;
+      errorMsg += 'Please select a bed position';
+    }
+
+    // Show error message if validation fails
+    if (!isValid) {
       Get.snackbar(
         'Validation Error',
-        'Please select a bed position',
+        errorMsg.trim(),
         snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red.shade700,
+        colorText: Colors.white,
+        duration: Duration(seconds: 4),
+        margin: EdgeInsets.all(10),
       );
-      return false;
     }
-    return true;
-  }
 
+    return isValid;
+  }
+  
   void _resetForm() {
     selectedDepartureStation.value = null;
     selectedArrivalStation.value = null;
@@ -440,6 +582,7 @@ class TicketController extends GetxController {
     selectedCitizenship.value = 'Ethiopian';
     firstNameController.clear();
     lastNameController.clear();
+    emailController.clear();
     phoneController.clear();
     passportController.clear();
     selectedSeatType.value = 'regular';

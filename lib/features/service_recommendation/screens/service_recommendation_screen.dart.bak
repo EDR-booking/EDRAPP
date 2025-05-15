@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../controllers/service_recommendation_controller.dart';
-import '../../ticket/models/service_model.dart';
+import '../models/service_model.dart';
 import 'package:flutter_application_2/utils/widgets/custom_app_bar.dart';
 
 class ServiceRecommendationScreen extends StatelessWidget {
@@ -13,13 +13,14 @@ class ServiceRecommendationScreen extends StatelessWidget {
     final controller = Get.isRegistered<ServiceRecommendationController>()
         ? Get.find<ServiceRecommendationController>()
         : Get.put(ServiceRecommendationController());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: isDark ? Colors.grey.shade900 : Colors.grey[50],
       appBar: CustomAppBar(
         title: 'Station Services',
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? Colors.grey.shade800 : Colors.white,
       ),
       body: Column(
         children: [
@@ -28,7 +29,7 @@ class ServiceRecommendationScreen extends StatelessWidget {
           
           // Category Filter
           Obx(() => controller.selectedStation.value.isNotEmpty
-              ? _buildCategoryFilter(controller)
+              ? _buildCategoryFilter(context, controller)
               : const SizedBox.shrink()
           ),
           
@@ -169,29 +170,39 @@ class ServiceRecommendationScreen extends StatelessWidget {
               
               // Show filtered services for selected station
               final filteredServices = controller.getFilteredServices();
-              
-              // If no services match the filter
+              // Show empty state if no services for this category
               if (filteredServices.isEmpty) {
-                return Center(
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return Padding(
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        Icons.search_off_outlined,
-                        size: 48,
-                        color: Colors.grey[400],
+                        Icons.search_off_rounded,
+                        size: 64,
+                        color: isDark ? Colors.grey[600] : Colors.grey[400],
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'No services match your filter',
+                        'No services found for ${controller.selectedCategory.value} category in ${controller.selectedStation.value}',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.grey[600],
                           fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
                         ),
                       ),
-                      TextButton(
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
                         onPressed: () => controller.setSelectedCategory('All'),
-                        child: const Text('Clear filter'),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Show all services'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          elevation: 2,
+                        ),
                       ),
                     ],
                   ),
@@ -203,7 +214,25 @@ class ServiceRecommendationScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 itemCount: filteredServices.length,
                 itemBuilder: (context, index) {
-                  final service = filteredServices[index];
+                  final ticketService = filteredServices[index];
+                  // Convert from ticket ServiceModel to service recommendation ServiceModel
+                  final service = ServiceModel(
+                    id: ticketService.id,
+                    name: ticketService.title,
+                    category: ticketService.category,
+                    rating: ticketService.rating,
+                    distance: double.tryParse(ticketService.distanceFromStation) ?? 0.0,
+                    imageUrl: ticketService.imageUrl,
+                    description: ticketService.description,
+                    priceRange: '\$\$',  // Default value
+                    contact: ticketService.phoneNumber,
+                    address: '',
+                    stationName: ticketService.stationName,
+                    distanceFromStation: double.tryParse(ticketService.distanceFromStation) ?? 0.0,
+                    email: ticketService.email,
+                    phoneNumber: ticketService.phoneNumber,
+                    alternativePhone: ticketService.alternativePhone
+                  );
                   return SimpleServiceCard(service: service, controller: controller);
                 },
               );
@@ -214,9 +243,11 @@ class ServiceRecommendationScreen extends StatelessWidget {
     );
   }
 
-  // Build station selector with enhanced UI
+  // Build station selector with modern UI
   Widget _buildStationSelector(BuildContext context, ServiceRecommendationController controller) {
     return Obx(() {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      
       // Debug output
       print('Building station selector with ${controller.stations.length} stations');
       if (controller.stations.isEmpty) {
@@ -234,9 +265,30 @@ class ServiceRecommendationScreen extends StatelessWidget {
       final stationItems = controller.stations.map((station) {
         return DropdownMenuItem<String>(
           value: station.name,
-          child: Text(
-            station.name,
-            style: const TextStyle(fontSize: 16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.train_rounded,
+                  size: 16,
+                  color: Theme.of(context).primaryColor,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                station.name,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+            ],
           ),
         );
       }).toList();
@@ -247,7 +299,23 @@ class ServiceRecommendationScreen extends StatelessWidget {
           DropdownMenuItem<String>(
             value: '',
             enabled: false,
-            child: Text('Loading stations...', style: TextStyle(color: Colors.grey[600])),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).primaryColor),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Loading stations...',
+                  style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                ),
+              ],
+            ),
           ),
         );
       } else if (stationItems.isEmpty) {
@@ -255,177 +323,272 @@ class ServiceRecommendationScreen extends StatelessWidget {
           DropdownMenuItem<String>(
             value: '',
             enabled: false,
-            child: Text('No stations available', style: TextStyle(color: Colors.red)),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red.shade400, size: 16),
+                const SizedBox(width: 12),
+                Text('No stations available', style: TextStyle(color: Colors.red.shade400)),
+              ],
+            ),
           ),
         );
       }
       
-      return Column(children: [
-        Container(
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: DropdownButtonFormField<String>(
-            value: controller.selectedStation.value.isEmpty ? null : controller.selectedStation.value,
-            hint: const Text('Select a station'),
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-            icon: const Icon(Icons.keyboard_arrow_down),
-            iconSize: 24,
-            isExpanded: true,
-            onChanged: (String? newValue) {
-              if (newValue != null) {
-                print('Station selected from dropdown: $newValue');
-                // The controller's setSelectedStation method will handle getting the ID and loading services
-                controller.setSelectedStation(newValue);
-                
-                // Navigate to the station detail screen
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => StationServicesDetailScreen(station: newValue),
-                  ),
-                );
-              }
-            },
-            items: stationItems,
-          ),
-        ),
-        
-        // Show station count for debugging
-        if (stationItems.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'No stations available. Please check your connection.',
-              style: TextStyle(color: Colors.red[700], fontSize: 14),
-            ),
-          ),
-      ]);
-    });
-  }
-
-  // Build category filter with enhanced UI and horizontal scrolling
-  Widget _buildCategoryFilter(ServiceRecommendationController controller) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Category title
-        Padding(
-          padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Categories',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Colors.grey[800],
-                ),
-              ),
-              // Indicator to show scrollable
-              Row(
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Row(
                 children: [
-                  Icon(Icons.swipe, size: 14, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.location_city_rounded,
+                    size: 18,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    'Scroll for more',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    'Select Station',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            // Dropdown
+            Container(
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey.shade800 : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: DropdownButtonFormField<String>(
+                value: controller.selectedStation.value.isEmpty ? null : controller.selectedStation.value,
+                hint: Row(
+                  children: [
+                    Icon(
+                      Icons.train_rounded,
+                      size: 16,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Select a station',
+                      style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: isDark ? Colors.grey.shade800 : Colors.white,
+                ),
+                icon: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
+                iconSize: 24,
+                isExpanded: true,
+                dropdownColor: isDark ? Colors.grey.shade800 : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                onChanged: (value) {
+                  if (value != null) {
+                    controller.setSelectedStation(value);
+                  }
+                },
+                items: stationItems,
+              ),
+            ),
+          ],
         ),
-        // Scrollable category chips
-        SizedBox(
-          height: 50,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: controller.categories.length,
-            itemBuilder: (context, index) {
-              final category = controller.categories[index];
-              return Obx(() {
-                final isSelected = category == controller.selectedCategory.value;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => controller.setSelectedCategory(category),
-                      borderRadius: BorderRadius.circular(25),
-                      splashColor: controller.getCategoryColor(category).withOpacity(0.3),
-                      child: Ink(
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? controller.getCategoryColor(category)
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: controller.getCategoryColor(category).withOpacity(0.3),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                controller.getCategoryIcon(category),
-                                size: 18,
-                                color: isSelected ? Colors.white : Colors.grey.shade700,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                category,
-                                style: TextStyle(
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                  color: isSelected ? Colors.white : Colors.grey.shade700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
+      );
+    });
+  }
+
+  // Build category filter with modern UI
+  Widget _buildCategoryFilter(BuildContext context, ServiceRecommendationController controller) {
+    return Obx(() {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.category_rounded,
+                      size: 18,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Filter by Category',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+                // Reset filter button
+                if (controller.selectedCategory.value != 'All')
+                  GestureDetector(
+                    onTap: () => controller.setSelectedCategory('All'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.refresh_rounded,
+                            size: 14,
+                            color: isDark ? Colors.white70 : Colors.grey.shade700,
                           ),
-                        ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Reset',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white70 : Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                );
-              });
-            },
+              ],
+            ),
           ),
-        ),
-        // Divider
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Divider(height: 1, color: Colors.grey[300]),
-        ),
-      ],
-    );
+          
+          // Category chips
+          Container(
+            height: 60,
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: controller.categories.length,
+              itemBuilder: (context, index) {
+                final category = controller.categories[index];
+                final isSelected = controller.selectedCategory.value == category;
+                final categoryColor = category == 'All' 
+                    ? Theme.of(context).primaryColor 
+                    : controller.getCategoryColor(category);
+                
+                return GestureDetector(
+                  onTap: () => controller.setSelectedCategory(category),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected 
+                          ? categoryColor 
+                          : (isDark ? Colors.grey.shade800 : Colors.white),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: isSelected 
+                            ? categoryColor 
+                            : categoryColor.withOpacity(0.3),
+                        width: 1.5,
+                      ),
+                      boxShadow: isSelected ? [
+                        BoxShadow(
+                          color: categoryColor.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ] : [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        // Only show icon for selected or All category
+                        if (isSelected || category == 'All')
+                          Icon(
+                            category == 'All' 
+                                ? Icons.view_module_rounded 
+                                : controller.getCategoryIcon(category),
+                            color: isSelected 
+                                ? Colors.white 
+                                : categoryColor,
+                            size: 16,
+                          ),
+                        if (isSelected || category == 'All')
+                          const SizedBox(width: 8),
+                        Text(
+                          category,
+                          style: TextStyle(
+                            color: isSelected 
+                                ? Colors.white 
+                                : (isDark ? Colors.white70 : categoryColor),
+                            fontWeight: isSelected 
+                                ? FontWeight.bold 
+                                : FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${service.distance.toStringAsFixed(1)} km',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          
+          // Divider
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            child: Divider(color: isDark ? Colors.grey.shade700 : Colors.grey.shade200),
+          ),
+        ],
+      );
+    });
   }
 }
 
@@ -666,139 +829,187 @@ class SimpleServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final categoryColor = controller.getCategoryColor(service.category);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shadowColor: Colors.black.withOpacity(0.1),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: categoryColor.withOpacity(0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ServiceDetailScreen(service: service),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+      child: Material(
+        color: isDark ? Colors.grey.shade800 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ServiceDetailScreen(service: service),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          splashColor: categoryColor.withOpacity(0.1),
+          highlightColor: categoryColor.withOpacity(0.05),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Service image
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: service.imageUrl.isNotEmpty
-                    ? Image.network(
-                        service.imageUrl,
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            width: 80,
-                            height: 80,
-                            color: categoryColor.withOpacity(0.2),
-                            child: Icon(
-                              controller.getCategoryIcon(service.category),
-                              color: categoryColor,
-                              size: 32,
-                            ),
-                          );
-                        },
-                      )
-                    : Container(
-                        width: 80,
-                        height: 80,
-                        color: categoryColor.withOpacity(0.2),
-                        child: Icon(
-                          controller.getCategoryIcon(service.category),
-                          color: categoryColor,
-                          size: 32,
-                        ),
-                      ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title and category
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            service.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              // Service image with category badge
+              Stack(
+                children: [
+                  // Image or placeholder
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    child: service.imageUrl.isNotEmpty
+                      ? Image.network(
+                          service.imageUrl,
+                          width: double.infinity,
+                          height: 140,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildImagePlaceholder(categoryColor);
+                          },
+                        )
+                      : _buildImagePlaceholder(categoryColor),
+                  ),
+                  // Category badge
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: categoryColor.withOpacity(0.1),
+                        color: categoryColor.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             controller.getCategoryIcon(service.category),
-                            size: 12,
-                            color: categoryColor,
+                            size: 14,
+                            color: Colors.white,
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 6),
                           Text(
                             service.category,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
-                              color: categoryColor,
-                              fontWeight: FontWeight.w500,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
                       ),
                     ),
+                  ),
+                ],
+              ),
+              
+              // Content
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title
+                    Text(
+                      service.name, // Using name directly instead of title getter
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 8),
-                    // Rating and distance
+                    
+                    // Description
+                    Text(
+                      service.description,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                        height: 1.4,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Divider
+                    Divider(color: isDark ? Colors.grey.shade700 : Colors.grey.shade200),
+                    const SizedBox(height: 12),
+                    
+                    // Contact info
                     Row(
                       children: [
-                        const Icon(
-                          Icons.star,
-                          color: Colors.amber,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${service.rating}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
+                        // Contact info
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: categoryColor.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.phone_outlined,
+                                  size: 14,
+                                  color: categoryColor,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  service.contact ?? 'No contact info',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        const Icon(
-                          Icons.map_outlined,
-                          color: Colors.grey,
-                          size: 16,
+                        
+                        // Distance info
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: categoryColor.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.map_outlined,
+                            size: 14,
+                            color: categoryColor,
+                          ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 8),
                         Text(
-                          '${service.distanceFromStation} m from ${service.stationName}',
+                          '${service.distance.toStringAsFixed(1)} km',
                           style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                            fontSize: 13,
+                            color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
                           ),
                         ),
                       ],
@@ -808,6 +1019,31 @@ class SimpleServiceCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+  
+  // Helper method to build image placeholder
+  Widget _buildImagePlaceholder(Color categoryColor) {
+    return Container(
+      width: double.infinity,
+      height: 140,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            categoryColor.withOpacity(0.7),
+            categoryColor.withOpacity(0.3),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          controller.getCategoryIcon(service.category),
+          color: Colors.white,
+          size: 48,
         ),
       ),
     );

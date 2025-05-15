@@ -1,95 +1,188 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_application_2/features/ticket/screen/bottomNavigationBar.dart';
+import 'package:flutter_application_2/utils/constants/sizes.dart';
+import 'package:flutter_application_2/utils/helpers/helper_functions.dart';
 import 'package:flutter_application_2/utils/localization/app_translations.dart';
 import 'package:get/get.dart';
-import 'package:flutter_application_2/utils/constants/sizes.dart';
+import 'package:iconsax/iconsax.dart';
 
 class Home extends StatelessWidget {
   const Home({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final isDark = THelperFunctions.isDarkMode(context);
+    final size = MediaQuery.of(context).size;
+    
+    // Apply dark mode specific styling if needed
+    final backgroundColor = isDark ? Colors.black : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    
+    // Set system overlay style for better immersion
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
+    
     return Scaffold(
-      // No app bar for cleaner fullscreen experience
-      body: Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage(
-              'assets/images/banners/00361362_9d16cff119a5c96118bc8e3458c80b9a_arc614x376_w735_us1.jpg',
-            ),
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(
-              Colors.black.withOpacity(0.5),
-              BlendMode.darken,
+      extendBodyBehindAppBar: true,
+      extendBody: true,
+      body: Stack(
+        children: [
+          // Background image with parallax effect
+          Container(
+            height: size.height,
+            width: size.width,
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: const AssetImage(
+                  'assets/images/banners/00361362_9d16cff119a5c96118bc8e3458c80b9a_arc614x376_w735_us1.jpg',
+                ),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withOpacity(0.4),
+                  BlendMode.darken,
+                ),
+                alignment: Alignment(0, -0.3),
+              ),
             ),
           ),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                const Color.fromARGB(255, 170, 217, 255).withOpacity(0.2),
-                Colors.indigo.withOpacity(0.6),
+          
+          // Gradient overlay for better text readability
+          Container(
+            height: size.height,
+            width: size.width,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.4),
+                  Colors.black.withOpacity(0.7),
+                ],
+                stops: const [0.1, 0.6, 1.0],
+              ),
+            ),
+          ),
+          
+          // Main content
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top bar with language selector and profile
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: TSizes.defaultSpace,
+                    vertical: TSizes.sm,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Language selector with enhanced design
+                      _buildLanguageSelectionRow(),
+                      
+                      // Profile icon
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Iconsax.user,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Main content area
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: TSizes.defaultSpace,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // App branding
+                          const SizedBox(height: TSizes.spaceBtwSections),
+                          Row(
+                            children: [
+                              Icon(
+                                Iconsax.bus,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                              const SizedBox(width: TSizes.xs),
+                              Text(
+                                'app_name'.tr,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          // Hero section
+                          const SizedBox(height: TSizes.spaceBtwSections),
+                          Text(
+                            'book_ticket'.tr,
+                            style: const TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              height: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: TSizes.sm),
+                          Text(
+                            'easy_booking_subtitle'.tr,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white.withOpacity(0.8),
+                              height: 1.5,
+                            ),
+                          ),
+                          
+                          // Schedule card with enhanced design
+                          const SizedBox(height: TSizes.spaceBtwSections),
+                          _buildTrainScheduleCard(),
+                          
+                          // Removed popular destinations section
+                          
+                          // Book now button with enhanced design
+                          const SizedBox(height: TSizes.spaceBtwSections),
+                          _buildBookNowButton(),
+                          const SizedBox(height: TSizes.spaceBtwSections),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Language selector at the top - directly integrated in main UI
-              _buildLanguageSelectionRow(),
-              
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: TSizes.defaultSpace,
-                  vertical: 30,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'app_name'.tr,
-                      style: const TextStyle(
-                        fontSize: TSizes.md,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(
-                            offset: Offset(1.0, 1.0),
-                            blurRadius: 3.0,
-                            color: Color.fromARGB(255, 0, 0, 0),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'book_ticket'.tr,
-                      style: const TextStyle(
-                        fontSize: TSizes.lg,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(
-                            offset: Offset(1.0, 1.0),
-                            blurRadius: 3.0,
-                            color: Color.fromARGB(255, 0, 0, 0),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildTrainScheduleCard(),
-                    const SizedBox(height: 20),
-                    _buildBookNowButton(),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -97,17 +190,23 @@ class Home extends StatelessWidget {
   // Language selector row that's directly integrated in the UI
   Widget _buildLanguageSelectionRow() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: TSizes.defaultSpace, vertical: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.language, color: Colors.white, size: 18),
+          Icon(Iconsax.global, color: Colors.white, size: 16),
           const SizedBox(width: 8),
           _buildLanguageButton('🇺🇸 EN', 'en', 'US'),
           const SizedBox(width: 5),
@@ -119,29 +218,30 @@ class Home extends StatelessWidget {
     );
   }
 
-  // Train schedule card
+  // Train schedule card with enhanced design
   Widget _buildTrainScheduleCard() {
     return Container(
-      padding: EdgeInsets.all(15),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.black.withOpacity(0.4),
-            Colors.indigo.withOpacity(0.3),
+            Colors.blue.shade900.withOpacity(0.7),
+            Colors.indigo.shade800.withOpacity(0.6),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1.5,
+          color: Colors.white.withOpacity(0.2),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 15,
             spreadRadius: 1,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -151,56 +251,60 @@ class Home extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.3),
+                  color: Colors.white.withOpacity(0.2),
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 1,
+                  ),
                 ),
                 child: Icon(
-                  Icons.train_rounded,
+                  Iconsax.bus,
                   color: Colors.white,
-                  size: 24,
+                  size: 20,
                 ),
               ),
-              SizedBox(width: 10),
+              const SizedBox(width: 12),
               Text(
                 'train_schedule'.tr,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
-                  fontSize: TSizes.md,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 15),
+          const SizedBox(height: 20),
           _buildScheduleItem(
             'Addis Ababa → Dire Dawa',
             'Odd-numbered days',
-            Icons.east_rounded,
+            Iconsax.arrow_right_3,
           ),
           Divider(color: Colors.white.withOpacity(0.2), height: 20),
           _buildScheduleItem(
             'Dire Dawa → Addis Ababa',
             'Even-numbered days',
-            Icons.west_rounded,
+            Iconsax.arrow_left_2,
           ),
           Divider(color: Colors.white.withOpacity(0.2), height: 20),
           Row(
             children: [
               Icon(
-                Icons.info_outline,
+                Iconsax.info_circle,
                 color: Colors.amber,
                 size: 16,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   'No service on 29th & 31st of any month',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.amber,
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -212,30 +316,30 @@ class Home extends StatelessWidget {
     );
   }
 
-  // Book now button
+  // Book now button with enhanced design
   Widget _buildBookNowButton() {
-    return InkWell(
+    return GestureDetector(
       onTap: () {
         showCitizenshipBottomSheet();
       },
-      borderRadius: BorderRadius.circular(12),
       child: Container(
-        height: 50,
+        height: 60,
+        width: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              Colors.blue,
+              Colors.blue.shade600,
               Colors.blue.shade800,
             ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 8,
-              offset: Offset(0, 4),
+              color: Colors.blue.shade900.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -244,18 +348,25 @@ class Home extends StatelessWidget {
           children: [
             Text(
               'book_ticket'.tr,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
-                fontSize: TSizes.lg,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.5,
               ),
             ),
-            SizedBox(width: TSizes.sm),
-            Icon(
-              Icons.train_rounded,
-              color: Colors.white,
-              size: TSizes.lg,
+            const SizedBox(width: TSizes.sm),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Iconsax.bus,
+                color: Colors.white,
+                size: 18,
+              ),
             ),
           ],
         ),
@@ -293,63 +404,56 @@ class Home extends StatelessWidget {
   void showCitizenshipBottomSheet() {
     Get.bottomSheet(
       Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              spreadRadius: 2,
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 15,
+              spreadRadius: 0,
+              offset: const Offset(0, -5),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Select Your Citizenship',
-              style: TextStyle(
-                fontSize: TSizes.lg,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+            Container(
+              width: 50,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(5),
               ),
             ),
-            const SizedBox(height: 10),
-            const Text(
-              'Are you Ethiopian or a foreigner?',
-              style: TextStyle(fontSize: TSizes.md, color: Colors.black87),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Iconsax.user_octagon,
+                  color: Colors.blue.shade700,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'select_citizenship'.tr,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade900,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              'For Ethiopians, a Fayda ID is required. For Djiboutians and other foreigners, a passport ID is required',
-              style: TextStyle(fontSize: TSizes.md, color: Colors.black87),
-            ),
-            const SizedBox(height: 20),
-            // Ethiopian Citizen Button
-            _citizenshipButton(
-              title: "Ethiopian Citizen",
-              icon: Icons.flag,
-              color: const Color.fromARGB(255, 24, 63, 26),
-              onTap: () => Get.to(() => CustomBottomNavigationBar(selectedCitizenship: 'Ethiopian')),
-            ),
-
-            // Djibouti Citizen Button
-            _citizenshipButton(
-              title: "Djibouti Citizen",
-              icon: Icons.language,
-              color: const Color.fromARGB(255, 30, 75, 153),
-              onTap: () => Get.to(() => CustomBottomNavigationBar(selectedCitizenship: 'Djiboutian')),
-            ),
-
-            // Foreign Citizen Button
-            _citizenshipButton(
-              title: "Foreign Citizen",
-              icon: Icons.public,
-              color: const Color.fromARGB(210, 255, 158, 11),
-              onTap: () => Get.to(() => CustomBottomNavigationBar(selectedCitizenship: 'Foreign')),
-            ),
+            const SizedBox(height: 24),
+            _buildCitizenshipOption('ethiopian_citizen'.tr, 'Ethiopian', Colors.green),
+            const SizedBox(height: 12),
+            _buildCitizenshipOption('djibouti_citizen'.tr, 'Djiboutian', Colors.blue),
+            const SizedBox(height: 12),
+            _buildCitizenshipOption('foreign_citizen'.tr, 'Foreign', Colors.orange),
 
             const SizedBox(height: 10),
           ],
@@ -358,30 +462,86 @@ class Home extends StatelessWidget {
     );
   }
 
-  // Reusable Citizenship Button
-  Widget _citizenshipButton({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: ElevatedButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, color: Colors.white),
-        label: Text(title),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 50),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+  // Citizenship option with enhanced design
+  Widget _buildCitizenshipOption(String title, String citizenshipType, MaterialColor baseColor) {
+    return GestureDetector(
+      onTap: () => Get.to(() => CustomBottomNavigationBar(
+        selectedCitizenship: citizenshipType,
+      )),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              baseColor.shade600,
+              baseColor.shade900,
+            ],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
           ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: baseColor.shade900.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                citizenshipType == 'Ethiopian' ? Iconsax.flag : 
+                citizenshipType == 'Djiboutian' ? Iconsax.flag : Iconsax.global,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    citizenshipType == 'Ethiopian' ? 'For Ethiopian citizens with Fayda ID' :
+                    citizenshipType == 'Djiboutian' ? 'For Djibouti citizens with passport' :
+                    'For foreigners with passport',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Iconsax.arrow_right_3,
+              color: Colors.white.withOpacity(0.7),
+              size: 20,
+            ),
+          ],
         ),
       ),
     );
   }
+  
+  // Removed the unused _buildDestinationCard method
   
   // Schedule item widget
   Widget _buildScheduleItem(String route, String days, IconData icon) {

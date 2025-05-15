@@ -28,21 +28,39 @@ class TicketEmailService {
     return List.generate(32, (_) => chars[random.nextInt(chars.length)]).join();
   }
   
+  /// Generate a shorter verification code for ticket verification
+  static String _generateVerificationCode() {
+    final Random random = Random.secure();
+    const String chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking characters I, O, 0, 1
+    return List.generate(8, (_) => chars[random.nextInt(chars.length)]).join();
+  }
+  
   /// Store ticket data in Firestore and return ticket ID with access token
   static Future<Map<String, String>> storeTicketData(TicketModel ticket) async {
     try {
       // Generate a secure access token
       final String accessToken = _generateSecureToken();
       
-      // Prepare ticket data for storage
+      // Convert ticket to JSON
+      final Map<String, dynamic> ticketJson = ticket.toJson();
+      
+      // Generate a unique verification code for the ticket (8 characters alphanumeric)
+      final String verificationCode = _generateVerificationCode();
+      
+      // Add metadata fields to the ticket data
       final Map<String, dynamic> ticketData = {
-        'ticketDetails': ticket.toJson(),
+        ...ticketJson,  // Spread the ticket JSON at the root level
         'accessToken': accessToken,
         'createdAt': FieldValue.serverTimestamp(),
         'expiresAt': DateTime.now().add(const Duration(days: 90)).millisecondsSinceEpoch,
         'viewed': false,
         'viewCount': 0,
         'lastViewedAt': null,
+        'isVerified': false,
+        'verifiedAt': null,
+        'verifiedBy': null,
+        'issuedAt': FieldValue.serverTimestamp(),
+        'ticketCode': verificationCode,  // Add ticket verification code
       };
       
       // Store in Firestore
@@ -50,7 +68,12 @@ class TicketEmailService {
           .collection('tickets')
           .add(ticketData);
       
-      debugPrint('✅ Ticket stored in Firestore with ID: ${docRef.id}');
+      // Update the document with its ID for easy reference
+      await docRef.update({
+        'ticketId': docRef.id,  // Add the Firestore document ID as a field
+      });
+      
+      debugPrint('✅ Ticket stored in Firestore with ID: ${docRef.id} and verification code: $verificationCode');
       
       return {
         'ticketId': docRef.id,
