@@ -4,12 +4,13 @@ import 'package:flutter_application_2/features/ticket/models/ticket_model.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
-/// A minimal ticket email service that sends only the ticket number
+/// A streamlined service for sending ticket emails
+/// This simplified version only sends the ticket number without additional text
 class TicketEmailService {
-  // EmailJS credentials that we know work based on the logs
-  static const String serviceId = 'service_cazg1yi';
-  static const String userId = 'J5_0snPB0vsaB6jBG';
-  
+  // EmailJS service credentials
+  static const String serviceId = 'service_o7qw1pu';
+  static const String userId = 'mQUT9kMHvq4MsNT1m';
+
   /// Send just the ticket number to the user's email
   /// Returns true if email sent successfully, false otherwise
   static Future<bool> sendTicketEmail(TicketModel ticket) async {
@@ -31,25 +32,27 @@ class TicketEmailService {
         debugPrint('❌ Error: No ticket number available');
         return false;
       }
-      
-      // Use EmailJS with minimal parameters - this is a direct approach based on what works
+
+      // Create a custom EmailJS template using an email template we know works
+      final emailParams = {
+        'service_id': serviceId,
+        'template_id': 'template_8clncxo', // Simple template with minimal text
+        'user_id': userId,
+        'template_params': {
+          'to_email': ticket.email,
+          'subject': 'Ethiopian Railway Ticket',
+          'message': ticket.ticket_number,
+        },
+      };
+
+      // Send the email via EmailJS
       final response = await http.post(
         Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
         headers: {
           'Content-Type': 'application/json',
           'origin': 'http://localhost',
         },
-        body: jsonEncode({
-          'service_id': serviceId,
-          'template_id': 'template_ib3l7k9',  // This template is known to work from logs
-          'user_id': userId,
-          'template_params': {
-            'to_email': ticket.email,
-            'subject': 'Your Ticket Number', 
-            // Only include the ticket number and nothing else
-            'otp_code': ticket.ticket_number,
-          },
-        }),
+        body: jsonEncode(emailParams),
       );
 
       if (response.statusCode == 200) {

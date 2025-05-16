@@ -13,7 +13,7 @@ class MyTicketScreen extends StatefulWidget {
 }
 
 class _MyTicketScreenState extends State<MyTicketScreen> {
-  final TextEditingController _ticketIdController = TextEditingController();
+  final TextEditingController _ticketNumberController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
   
@@ -26,16 +26,16 @@ class _MyTicketScreenState extends State<MyTicketScreen> {
 
   @override
   void dispose() {
-    _ticketIdController.dispose();
+    _ticketNumberController.dispose();
     super.dispose();
   }
 
   Future<void> _lookupTicket() async {
-    final String ticketId = _ticketIdController.text.trim();
+    final String ticketNumber = _ticketNumberController.text.trim();
     
-    if (ticketId.isEmpty) {
+    if (ticketNumber.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter a ticket ID';
+        _errorMessage = 'Please enter a ticket number';
       });
       return;
     }
@@ -46,20 +46,24 @@ class _MyTicketScreenState extends State<MyTicketScreen> {
     });
 
     try {
-      // Query Firestore for the ticket
-      final DocumentSnapshot ticketDoc = await FirebaseFirestore.instance
+      // Query Firestore for the ticket using ticket_number field
+      final QuerySnapshot querySnapshot = await FirebaseFirestore.instance
           .collection('tickets')
-          .doc(ticketId)
+          .where('ticket_number', isEqualTo: ticketNumber)
+          .limit(1)
           .get();
 
-      if (!ticketDoc.exists) {
+      if (querySnapshot.docs.isEmpty) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Ticket not found. Please check the ID and try again.';
+          _errorMessage = 'Ticket not found. Please check the ticket number and try again.';
         });
         return;
       }
 
+      // Get the first document from the query results
+      final DocumentSnapshot ticketDoc = querySnapshot.docs.first;
+      
       // Create ticket model from document data
       final Map<String, dynamic> data = ticketDoc.data() as Map<String, dynamic>;
       final TicketModel ticket = TicketModel.fromJson(data, ticketDoc.id);
@@ -82,7 +86,7 @@ class _MyTicketScreenState extends State<MyTicketScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Find Ticket by ID'),
+        title: Text('Find My Ticket'),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -99,25 +103,26 @@ class _MyTicketScreenState extends State<MyTicketScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Enter Your Ticket ID',
+                      'Enter Your Ticket Number',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Please enter your ticket ID to access your ticket details',
+                      'Please enter your ticket number to access your ticket details',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Colors.grey[600],
                           ),
                     ),
                     const SizedBox(height: 20),
                     TextField(
-                      controller: _ticketIdController,
+                      controller: _ticketNumberController,
                       decoration: InputDecoration(
-                        labelText: 'Ticket ID',
-                        hintText: 'Enter your ticket ID here',
+                        labelText: 'Ticket Number',
+                        hintText: 'Enter your 10-character ticket number',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.confirmation_number_outlined),
                       ),
+                      maxLength: 10, // Ensure exactly 10 characters
                       onSubmitted: (_) => _lookupTicket(),
                     ),
                     if (_errorMessage != null) ...[                      
@@ -156,19 +161,24 @@ class _MyTicketScreenState extends State<MyTicketScreen> {
             const SizedBox(height: 30),
             // Instructions
             Text(
-              'How to find your ticket by ID',
+              'How to find your ticket',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 12),
             _buildInstructionStep(
               context,
               number: '1',
-              text: 'Enter your ticket ID in the field above',
+              text: 'Enter your 10-character ticket number from your email',
             ),
             _buildInstructionStep(
               context,
               number: '2',
               text: 'Click "Find My Ticket" to view your ticket details',
+            ),
+            _buildInstructionStep(
+              context,
+              number: '3',
+              text: 'You can download the QR code or send the ticket to your email again if needed',
             ),
           ],
         ),

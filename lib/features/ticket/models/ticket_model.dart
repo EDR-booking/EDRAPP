@@ -16,6 +16,10 @@ class TicketModel {
   final String status;
   final DateTime createdAt;
   final String citizenship;
+  final String? ticket_number;
+  final String? accessToken;
+  final String? ticketCode;
+  final int? expiresAt;
 
   TicketModel({
     this.id,
@@ -32,12 +36,16 @@ class TicketModel {
     required this.price,
     required this.status,
     required this.citizenship,
+    this.ticket_number,
+    this.accessToken,
+    this.ticketCode,
+    this.expiresAt,
     DateTime? createdAt,
   }) : this.createdAt = createdAt ?? DateTime.now();
 
   // Convert model to JSON
   Map<String, dynamic> toJson() {
-    return {
+    final Map<String, dynamic> json = {
       'departure': departure,
       'arrival': arrival,
       'date': Timestamp.fromDate(date),
@@ -49,10 +57,17 @@ class TicketModel {
       'seatType': seatType,
       'bedPosition': bedPosition,
       'price': price,
-      'status': status,
+      'status': 'confirmed', // Always save as confirmed
       'citizenship': citizenship,
       'createdAt': Timestamp.fromDate(createdAt),
+      'ticket_number': ticket_number,
     };
+
+    // Add only the accessToken and expiresAt (not ticketCode, isVerified, verifiedAt)
+    if (accessToken != null) json['accessToken'] = accessToken;
+    if (expiresAt != null) json['expiresAt'] = expiresAt;
+    
+    return json;
   }
 
   // Create model from JSON
@@ -72,7 +87,11 @@ class TicketModel {
       price: (json['price'] ?? 0.0).toDouble(),
       status: json['status'] ?? '',
       citizenship: json['citizenship'] ?? '',
-      createdAt: (json['createdAt'] as Timestamp).toDate(),
+      ticket_number: json['ticket_number'],
+      accessToken: json['accessToken'],
+      ticketCode: json['ticketCode'],
+      expiresAt: json['expiresAt'],
+      createdAt: (json['createdAt'] is Timestamp) ? (json['createdAt'] as Timestamp).toDate() : DateTime.now(),
     );
   }
 
@@ -93,6 +112,10 @@ class TicketModel {
     String? status,
     String? citizenship,
     DateTime? createdAt,
+    String? ticket_number,
+    String? accessToken,
+    String? ticketCode,
+    int? expiresAt,
   }) {
     return TicketModel(
       id: id ?? this.id,
@@ -110,6 +133,10 @@ class TicketModel {
       status: status ?? this.status,
       citizenship: citizenship ?? this.citizenship,
       createdAt: createdAt ?? this.createdAt,
+      ticket_number: ticket_number ?? this.ticket_number,
+      accessToken: accessToken ?? this.accessToken,
+      ticketCode: ticketCode ?? this.ticketCode,
+      expiresAt: expiresAt ?? this.expiresAt,
     );
   }
 }

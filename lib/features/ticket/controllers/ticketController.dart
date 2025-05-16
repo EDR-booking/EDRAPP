@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
+import 'dart:math';
 import '../../../data/repositories/ticket_repositories.dart';
 import '../../../features/price/repositories/price_repository.dart';
 import '../../../features/price/models/price_model.dart';
@@ -663,9 +664,57 @@ class TicketController extends GetxController {
     }
   }
 
+  // Generate a random 10-character alphanumeric ticket number
+  String _generateTicketNumber() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rnd = new Random();
+    return String.fromCharCodes(
+      Iterable.generate(
+        10, // Exactly 10 characters
+        (_) => chars.codeUnitAt(rnd.nextInt(chars.length)),
+      ),
+    );
+  }
+
+  // Generate a random 8-character verification code
+  String _generateVerificationCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking characters
+    final rnd = new Random();
+    return String.fromCharCodes(
+      Iterable.generate(
+        8, // 8 characters
+        (_) => chars.codeUnitAt(rnd.nextInt(chars.length)),
+      ),
+    );
+  }
+  
+  // Generate a secure access token
+  String _generateAccessToken() {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rnd = new Random.secure();
+    return String.fromCharCodes(
+      Iterable.generate(
+        32, // 32 characters for security
+        (_) => chars.codeUnitAt(rnd.nextInt(chars.length)),
+      ),
+    );
+  }
+
   Future<TicketModel?> _createTicket() async {
     try {
-      // Create ticket model with confirmed status directly
+      // Generate a unique 10-character ticket number
+      final String ticketNumber = _generateTicketNumber();
+      
+      // Generate a verification code for the ticket
+      final String verificationCode = _generateVerificationCode();
+      
+      // Generate an access token
+      final String accessToken = _generateAccessToken();
+      
+      // Calculate expiration date (90 days from now)
+      final int expiresAt = DateTime.now().add(const Duration(days: 90)).millisecondsSinceEpoch;
+      
+      // Create ticket model with all necessary fields
       final TicketModel ticket = TicketModel(
         departure: selectedDepartureStation.value!,
         arrival: selectedArrivalStation.value!,
@@ -680,6 +729,10 @@ class TicketController extends GetxController {
         price: currentSeatPrice,
         status: 'confirmed', // Mark as confirmed immediately
         citizenship: selectedCitizenship.value,
+        ticket_number: ticketNumber,
+        accessToken: accessToken,
+        // Removed ticketCode as it's not needed
+        expiresAt: expiresAt,
         createdAt: DateTime.now(),
       );
 
@@ -689,7 +742,7 @@ class TicketController extends GetxController {
       // Create a TicketModel with the ID included
       final updatedTicket = ticket.copyWith(id: ticketId);
       
-      print('Ticket created and confirmed with ID: $ticketId');
+      print('Ticket created and confirmed with ID: $ticketId, Ticket Number: $ticketNumber');
 
       return updatedTicket;
     } catch (e) {
@@ -705,84 +758,20 @@ class TicketController extends GetxController {
     try {
       print('STEP 1: Starting ticket display');
       
-      // Show the ticket in the ticket view screen
-      await Get.to(() => TicketViewScreen(ticket: ticket));
+      // Show the ticket in the ticket view screen with a flag to indicate this is the initial view after booking
+      // The isNewBooking flag will control whether to show the email button in the ticket view
+      await Get.to(() => TicketViewScreen(ticket: ticket, isNewBooking: true));
       
       print('STEP 2: Ticket displayed successfully');
       
-      // Send the ticket via email if email is provided
-      if (ticket.email.isNotEmpty) {
-        print('STEP 3: Email provided, preparing to send email');
-        print('EMAIL INFO - Email address: ${ticket.email}');
-        print('EMAIL INFO - Ticket ID: ${ticket.id}');
-        print('EMAIL INFO - User: ${ticket.firstName} ${ticket.lastName}');
-        
-        // This will execute outside the normal flow as a separate process
-        Future(() async {
-          try {
-            print('STEP 4: Starting email service');
-            
-            Get.snackbar(
-              'Sending Email',
-              'Sending your ticket to ${ticket.email}...',
-              snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: Colors.blue,
-              colorText: Colors.white,
-              duration: const Duration(seconds: 10),
-            );
-            
-            // Force delay to ensure snackbar is shown
-            await Future.delayed(const Duration(seconds: 1));
-            
-            // Use the TicketEmailService to send the email
-            print('STEP 5: Calling TicketEmailService.sendTicketEmail');
-            final emailSent = await TicketEmailService.sendTicketEmail(ticket);
-            
-            if (emailSent) {
-              print('STEP 6: Email sent successfully');
-              Get.snackbar(
-                'Email Sent',
-                'Your ticket has been sent to ${ticket.email}',
-                snackPosition: SnackPosition.BOTTOM,
-                backgroundColor: Colors.green,
-                colorText: Colors.white,
-                duration: const Duration(seconds: 5),
-              );
-            } else {
-              print('STEP 6: Email sending failed');
-              Get.snackbar(
-                'Email Not Sent',
-                'Failed to send ticket. Please try again.',
-                snackPosition: SnackPosition.BOTTOM,
-                backgroundColor: Colors.red,
-                colorText: Colors.white,
-                duration: const Duration(seconds: 5),
-              );
-            }
-          } catch (emailError) {
-            print('EMAIL ERROR: $emailError');
-            Get.snackbar(
-              'Email Error',
-              'Error: $emailError',
-              snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: Colors.red,
-              colorText: Colors.white,
-              duration: const Duration(seconds: 8),
-            );
-          }
-        });
-        
-        // Continue with main flow
-        print('STEP 7: Continuing with main app flow');
-        
-      } else {
-        print('DEBUG: No email provided for ticket ${ticket.id}');
-      }
+      // Email sending is now handled in the TicketViewScreen when user presses the Send Email button
+      // This prevents duplicate emails and gives the user more control
+      print('STEP 3: Email will be sent from ticket view screen if user requests it');
     } catch (e) {
-      print('MAIN ERROR in _generateAndShowTicket: $e');
+      print('ERROR in _generateAndShowTicket: $e');
       Get.snackbar(
         'Error',
-        'Failed to generate ticket: ${e.toString()}',
+        'Failed to display ticket: ${e.toString()}',
         backgroundColor: Colors.red,
         colorText: Colors.white,
         snackPosition: SnackPosition.BOTTOM,

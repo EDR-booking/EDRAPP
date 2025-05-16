@@ -1,7 +1,10 @@
 // Imports
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Add import for Clipboard
 import 'package:flutter_application_2/features/ticket/models/ticket_model.dart';
 import 'package:flutter_application_2/features/ticket/services/qr_generator_service.dart';
+import 'package:flutter_application_2/features/ticket/services/ticket_email_service.dart';
 import 'package:flutter_application_2/utils/constants/colors.dart';
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';
@@ -12,10 +15,22 @@ import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 
-class TicketViewScreen extends StatelessWidget {
+class TicketViewScreen extends StatefulWidget {
   final TicketModel ticket;
+  final bool isNewBooking;
 
-  const TicketViewScreen({Key? key, required this.ticket}) : super(key: key);
+  const TicketViewScreen({Key? key, required this.ticket, this.isNewBooking = false}) : super(key: key);
+  
+  @override
+  State<TicketViewScreen> createState() => _TicketViewScreenState();
+}
+
+class _TicketViewScreenState extends State<TicketViewScreen> {
+  // Track if button is disabled
+  bool _emailButtonDisabled = false;
+  
+  // Getter for ticket to match previous code
+  TicketModel get ticket => widget.ticket;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +59,7 @@ class TicketViewScreen extends StatelessWidget {
       ),
       body: FutureBuilder<String>(
         future: QRGeneratorService.generateQRData(
-          ticket.id ?? 'unknown',
+          ticket.ticket_number ?? ticket.id ?? 'unknown',
           ticket.firstName,
           ticket.lastName,
           ticket.departure,
@@ -94,12 +109,15 @@ class TicketViewScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildActionButton(
-                        context,
-                        icon: Icons.email_outlined,
-                        label: 'Email ID',
-                        onTap: () => _sendEmailWithTicketId(),
-                      ),
+                      // Only show email button for new bookings
+                      if (widget.isNewBooking)
+                        _buildActionButton(
+                          context,
+                          icon: Icons.email_outlined,
+                          label: _emailButtonDisabled ? 'Sending...' : 'Send Email',
+                          onTap: _emailButtonDisabled ? null : () => _sendEmailWithTicketId(),
+                          isDisabled: _emailButtonDisabled,
+                        ),
                       _buildActionButton(
                         context,
                         icon: Icons.download_outlined,
@@ -167,7 +185,7 @@ class TicketViewScreen extends StatelessWidget {
             ),
           ),
 
-          // Ticket ID
+          // Ticket Number
           Container(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
             color: TColors.primary.withOpacity(0.2),
@@ -177,7 +195,7 @@ class TicketViewScreen extends StatelessWidget {
                 Icon(Icons.confirmation_number, color: TColors.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'TICKET #: ${ticket.id}',
+                  'TICKET #: ${ticket.ticket_number ?? 'N/A'}',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -290,7 +308,7 @@ class TicketViewScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Ticket ID: ${ticket.id}',
+                        'Ticket Number: ${ticket.ticket_number ?? 'N/A'}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Colors.grey.shade700,
                             ),
@@ -339,25 +357,30 @@ class TicketViewScreen extends StatelessWidget {
   Widget _buildActionButton(BuildContext context, {
     required IconData icon,
     required String label,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    bool isDisabled = false,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: onTap, // This will be null when disabled
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: TColors.primary.withOpacity(0.1),
+          color: isDisabled 
+            ? Colors.grey.withOpacity(0.2)  // Grayed out when disabled
+            : TColors.primary.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            Icon(icon, color: TColors.primary),
+            Icon(icon, 
+              color: isDisabled ? Colors.grey : TColors.primary,
+            ),
             const SizedBox(width: 8),
             Text(
               label,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
-                    color: TColors.primary,
+                    color: isDisabled ? Colors.grey : TColors.primary,
                   ),
             ),
           ],
@@ -366,123 +389,63 @@ class TicketViewScreen extends StatelessWidget {
     );
   }
   
-  // Send ticket ID via email directly using EmailJS
-  void _sendEmailWithTicketId() async {
-    try {
-      // Show loading indicator
-      Get.dialog(
-        Center(child: CircularProgressIndicator()),
-        barrierDismissible: false,
-      );
-      
-      // Using EmailJS for direct sending without opening email client
-      final String serviceId = 'service_cazg1yi';
-      final String templateId = 'template_ib3l7k9'; // Using the working OTP template
-      final String userId = 'J5_0snPB0vsaB6jBG';
-      
-      // Format date and time for the email
-      final dateFormatter = DateFormat('MMM dd, yyyy');
-      final timeFormatter = DateFormat('h:mm a');
-      
-      // Prepare the email content with ticket details
-      final Map<String, dynamic> templateParams = {
-        'to_email': ticket.email,
-        'otp_code': ticket.id ?? 'N/A', // Using otp_code field as it's required by the template
-        'expiration_minutes': '90', // Days until the ticket expires
-        'message': '''
-          Ethiopian Railway - E-Ticket Confirmation
-          
-          Dear ${ticket.firstName} ${ticket.lastName},
-          
-          Your ticket has been successfully booked!
-          
-          Ticket ID: ${ticket.id}
-          From: ${ticket.departure}
-          To: ${ticket.arrival}
-          Date: ${dateFormatter.format(ticket.date)}
-          Time: ${timeFormatter.format(ticket.date)}
-          Seat Type: ${ticket.seatType}
-          Bed Position: ${ticket.bedPosition}
-          Price: ETB ${ticket.price.toStringAsFixed(2)}
-          
-          Please present this ticket ID at the station for boarding.
-          
-          Thank you for choosing Ethiopian Railway!
-        ''',
-      };
-      
-      debugPrint('Sending email with params: $templateParams');
-      
-      // Send the email using EmailJS
-      final response = await http.post(
-        Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'service_id': serviceId,
-          'template_id': templateId,
-          'user_id': userId,
-          'template_params': templateParams,
-        }),
-      );
-      
-      // Close loading dialog
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-      
-      // Check response
-      if (response.statusCode == 200) {
-        // Show success message
+  // A completely simplified version of sending ticket by email
+  void _sendEmailWithTicketId() {
+    // Set button as disabled temporarily
+    setState(() {
+      _emailButtonDisabled = true;
+    });
+    
+    // Show a simple snackbar that we're sending
+    Get.snackbar(
+      'Sending Email',
+      'Sending ticket to ${ticket.email}...',
+      snackPosition: SnackPosition.TOP,
+      backgroundColor: Colors.blue,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 1),
+    );
+    
+    // Fire-and-forget approach to send the email
+    TicketEmailService.sendTicketEmail(ticket).then((success) {
+      // Show appropriate message based on success
+      if (success) {
         Get.snackbar(
-          '✅ Email Sent',
-          'Your ticket has been sent to ${ticket.email}. Please check your inbox.',
+          'Email Sent',
+          'Ticket sent to ${ticket.email}',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
           colorText: Colors.white,
-          duration: Duration(seconds: 4),
         );
       } else {
-        // Log the error for debugging
-        print('EmailJS Error: ${response.statusCode} - ${response.body}');
-        
-        // Show error and fallback to copyable ID
         Get.snackbar(
-          '⚠️ Email Not Sent',
-          'We couldn\'t send your ticket. Please try again or contact support.',
+          'Email Error',
+          'Could not send email. Please try again.',
           snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.orange,
+          backgroundColor: Colors.red,
           colorText: Colors.white,
-          duration: Duration(seconds: 4),
         );
-        _showCopyableTicketId();
       }
-    } catch (e) {
-      // Close loading dialog
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-      
-      // Log the error for debugging
-      print('Email Error: $e');
-      
-      // Show error message
+    }).catchError((error) {
+      // Handle any errors
       Get.snackbar(
-        '❌ Error Sending Email',
-        'Please check your internet connection and try again.',
+        'Error',
+        'Failed to send email: $error',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: Duration(seconds: 4),
       );
-      
-      // Show copyable ID as fallback
-      _showCopyableTicketId();
-    }
+    }).whenComplete(() {
+      // Always re-enable the button
+      if (mounted) {
+        setState(() {
+          _emailButtonDisabled = false;
+        });
+      }
+    });
   }
   
-  // Download ticket as an image
+  // Download QR code as an image
   void _downloadTicket() async {
     try {
       // Show loading indicator
@@ -491,24 +454,69 @@ class TicketViewScreen extends StatelessWidget {
         barrierDismissible: false,
       );
       
-      // For now, just show a message as the actual implementation would require
-      // rendering the ticket to an image which is more complex
-      await Future.delayed(Duration(seconds: 1));
+      // Generate QR code data
+      final qrData = ticket.ticket_number ?? ticket.id ?? 'Unknown ticket';
+      
+      // Create a QR image
+      final qrPainter = QrPainter(
+        data: qrData,
+        version: QrVersions.auto,
+        color: Colors.black,
+        emptyColor: Colors.white,
+        gapless: true,
+        errorCorrectionLevel: QrErrorCorrectLevel.H,
+      );
+      
+      // Convert to image - size 200x200 pixels
+      final size = 200.0;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      
+      // Fill with white background
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size, size),
+        Paint()..color = Colors.white,
+      );
+      
+      // Draw QR code
+      qrPainter.paint(canvas, Size(size, size));
+      
+      // Convert to image
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(size.toInt(), size.toInt());
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      
+      if (byteData == null) {
+        throw Exception('Failed to generate QR image');
+      }
+      
+      final bytes = byteData.buffer.asUint8List();
+      
+      // Save the image using ImageGallerySaver
+      final result = await ImageGallerySaver.saveImage(
+        bytes,
+        quality: 100,
+        name: 'Ethiopian_Railway_Ticket_${ticket.ticket_number}_${DateTime.now().millisecondsSinceEpoch}',
+      );
       
       // Close loading dialog
       if (Get.isDialogOpen ?? false) {
         Get.back();
       }
       
-      // Show message
-      Get.snackbar(
-        'Coming Soon',
-        'Ticket download will be available in the next update',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.blue,
-        colorText: Colors.white,
-        duration: Duration(seconds: 3),
-      );
+      // Check if saved successfully
+      if (result['isSuccess']) {
+        Get.snackbar(
+          'Success',
+          'QR code saved to your gallery',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+      } else {
+        throw Exception('Failed to save image to gallery');
+      }
     } catch (e) {
       // Close loading dialog
       if (Get.isDialogOpen ?? false) {
@@ -518,7 +526,7 @@ class TicketViewScreen extends StatelessWidget {
       // Show error message
       Get.snackbar(
         'Error',
-        'Could not download ticket: ${e.toString()}',
+        'Could not download QR code: ${e.toString()}',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
@@ -527,22 +535,22 @@ class TicketViewScreen extends StatelessWidget {
     }
   }
   
-  // Show dialog with copyable ticket ID if email fails
+  // Show dialog with copyable ticket number if email fails
   void _showCopyableTicketId() {
     // Close loading dialog if open
     if (Get.isDialogOpen ?? false) {
       Get.back();
     }
     
-    // Show dialog with copyable ticket ID
+    // Show dialog with copyable ticket number
     Get.dialog(
       AlertDialog(
-        title: Text('Your Ticket ID'),
+        title: Text('Your Ticket Number'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Could not open email app. Copy your ticket ID:'),
+            Text('Could not open email app. Copy your ticket number:'),
             SizedBox(height: 15),
             Container(
               padding: EdgeInsets.all(10),
@@ -551,7 +559,7 @@ class TicketViewScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(5),
               ),
               child: SelectableText(
-                '${ticket.id}',
+                '${ticket.ticket_number ?? 'N/A'}',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
@@ -568,6 +576,10 @@ class TicketViewScreen extends StatelessWidget {
   }
 
   Widget _buildInstructionsCard(BuildContext context) {
+    // Determine if we're in dark mode
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
+    
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -582,7 +594,7 @@ class TicketViewScreen extends StatelessWidget {
               'IMPORTANT INSTRUCTIONS',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: textColor,
                   ),
             ),
             const SizedBox(height: 12),
@@ -595,6 +607,13 @@ class TicketViewScreen extends StatelessWidget {
               context,
               icon: Icons.qr_code_scanner,
               text: 'Show this QR code to the staff for verification',
+            ),
+            // Instruction for using the ticket number in My Ticket tab
+            _buildInstructionItem(
+              context,
+              icon: Icons.confirmation_number,
+              text: 'Use your ticket number "${ticket.ticket_number}" in the "My Ticket" tab to access your ticket at any time',
+              isHighlighted: true,
             ),
             // ID requirement based on nationality
             _buildInstructionItem(
@@ -626,6 +645,12 @@ class TicketViewScreen extends StatelessWidget {
     required String text,
     bool isHighlighted = false,
   }) {
+    // Determine if we're in dark mode
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? 
+      (isHighlighted ? Colors.red[300] : Colors.white) : 
+      (isHighlighted ? Colors.red : Colors.black87);
+    
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -637,7 +662,7 @@ class TicketViewScreen extends StatelessWidget {
             child: Text(
               text,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isHighlighted ? Colors.red : Colors.black87,
+                    color: textColor,
                     fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
                   ),
             ),

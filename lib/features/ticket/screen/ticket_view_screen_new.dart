@@ -1,11 +1,17 @@
 // Imports
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_application_2/features/ticket/models/ticket_model.dart';
 import 'package:flutter_application_2/features/ticket/services/qr_generator_service.dart';
+import 'package:flutter_application_2/features/ticket/services/ticket_email_service.dart';
 import 'package:flutter_application_2/utils/constants/colors.dart';
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class TicketViewScreen extends StatelessWidget {
   final TicketModel ticket;
@@ -85,8 +91,24 @@ class TicketViewScreen extends StatelessWidget {
                   
                   const SizedBox(height: 24),
                   
-                  // No action buttons needed
-                  const SizedBox(height: 10),
+                  // Actions row with email and download buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildActionButton(
+                        context,
+                        icon: Icons.email_outlined,
+                        label: 'Send Email',
+                        onTap: () => _sendEmailWithTicketNumber(),
+                      ),
+                      _buildActionButton(
+                        context,
+                        icon: Icons.download_outlined,
+                        label: 'Download',
+                        onTap: () => _downloadQRCode(qrData),
+                      ),
+                    ],
+                  ),
                   
                   const SizedBox(height: 24),
                   
@@ -146,7 +168,7 @@ class TicketViewScreen extends StatelessWidget {
             ),
           ),
 
-          // Ticket ID
+          // Ticket Number
           Container(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
             color: TColors.primary.withOpacity(0.2),
@@ -156,7 +178,7 @@ class TicketViewScreen extends StatelessWidget {
                 Icon(Icons.confirmation_number, color: TColors.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'TICKET #: ${ticket.id}',
+                  'TICKET #: ${ticket.ticket_number ?? 'N/A'}',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -269,7 +291,7 @@ class TicketViewScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Ticket ID: ${ticket.id}',
+                        'Ticket Number: ${ticket.ticket_number ?? 'N/A'}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Colors.grey.shade700,
                             ),
@@ -373,6 +395,7 @@ class TicketViewScreen extends StatelessWidget {
     required String text,
     bool isHighlighted = false,
   }) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -384,7 +407,7 @@ class TicketViewScreen extends StatelessWidget {
             child: Text(
               text,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isHighlighted ? Colors.red : Colors.black87,
+                    color: isHighlighted ? Colors.red : (isDarkMode ? Colors.white : Colors.black87),
                     fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
                   ),
             ),
@@ -392,5 +415,112 @@ class TicketViewScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+  
+  // Helper method to build action buttons
+  Widget _buildActionButton(BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: TColors.primary,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+    );
+  }
+
+  // Method to send ticket information via email
+  void _sendEmailWithTicketNumber() async {
+    try {
+      await TicketEmailService().sendTicketLinkEmail(ticket);
+      Get.snackbar(
+        'Success',
+        'Ticket information sent to ${ticket.email}',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to send email: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+    }
+  }
+
+  // Method to download QR code as image
+  void _downloadQRCode(String qrData) async {
+    try {
+      // Request storage permission
+      final status = await Permission.storage.request();
+      if (!status.isGranted) {
+        Get.snackbar(
+          'Permission Denied',
+          'Storage permission is required to save the QR code',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      // Show loading indicator
+      Get.dialog(
+        const Center(
+          child: CircularProgressIndicator(),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Generate QR code image bytes
+      final qrImageBytes = await QRGeneratorService.generateQRImageBytes(qrData, size: 300);
+      
+      if (qrImageBytes != null) {
+        // Save the image to gallery
+        final result = await ImageGallerySaver.saveImage(
+          qrImageBytes,
+          quality: 100,
+          name: 'edr_ticket_${ticket.ticket_number ?? 'unknown'}',
+        );
+        
+        // Close loading dialog
+        Get.back();
+        
+        // Show success message
+        Get.snackbar(
+          'Success',
+          'QR code saved to gallery',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+      } else {
+        // Close loading dialog
+        Get.back();
+        
+        throw Exception('Failed to generate QR code image');
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+      
+      Get.snackbar(
+        'Error',
+        'Failed to save QR code: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+    }
   }
 }
