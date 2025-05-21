@@ -40,6 +40,177 @@ class _TicketScreenState extends State<TicketScreen> {
     controller.updatePricesBasedOnCitizenship();
   }
 
+  // Show OTP verification dialog
+  Future<void> _showOTPDialog() async {
+    final controller = Get.find<TicketController>();
+    
+    // Create a local controller for the OTP input
+    final otpController = TextEditingController();
+    bool isDialogOpen = true;
+    
+    // Clear any previous OTP errors
+    controller.otpError.value = '';
+    
+    // Helper function to safely update the dialog state
+    void safeDialogUpdate(VoidCallback fn) {
+      if (isDialogOpen && mounted) {
+        if (fn != null) fn();
+      }
+    }
+    
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              void updateState() {
+                if (isDialogOpen && mounted) {
+                  setDialogState(() {});
+                }
+              }
+              
+              return GetBuilder<TicketController>(
+                builder: (controller) {
+                  return WillPopScope(
+                    onWillPop: () async {
+                      // Prevent dialog from being dismissed while verifying
+                      return !controller.isVerifyingOTP.value;
+                    },
+                    child: AlertDialog(
+                      title: const Text('Verify Your Email'),
+                      content: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('We have sent an OTP to ${controller.emailController.text}. Please enter it below:'),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: otpController,
+                              onChanged: (value) {
+                                // Update the OTP code in the controller
+                                controller.otpCode.value = value;
+                                // Clear any previous errors when typing
+                                if (controller.otpError.isNotEmpty) {
+                                  controller.otpError.value = '';
+                                }
+                                // Update the UI
+                                updateState();
+                              },
+                              decoration: InputDecoration(
+                                labelText: 'Enter OTP',
+                                errorText: controller.otpError.isEmpty ? null : controller.otpError.value,
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ],
+                        ),
+                      ),
+                      actions: <Widget>[
+                        TextButton(
+                          onPressed: controller.isVerifyingOTP.value
+                              ? null
+                              : () {
+                                  // Clear the OTP code and error
+                                  otpController.clear();
+                                  controller.otpCode.value = '';
+                                  controller.otpError.value = '';
+                                  if (mounted) {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: (controller.isVerifyingOTP.value || otpController.text.trim().isEmpty)
+                              ? null
+                              : () async {
+                                  // Show loading state
+                                  controller.isVerifyingOTP.value = true;
+                                  updateState();
+                                  
+                                  try {
+                                    final verified = await controller.verifyOTP();
+                                    
+                                    if (!isDialogOpen) return;
+                                    
+                                    if (verified) {
+                                      // Clear the OTP field and close the dialog
+                                      otpController.clear();
+                                      if (mounted) {
+                                        Navigator.of(context).pop(true);
+                                        // Show success message
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Email verified successfully!'),
+                                            backgroundColor: Colors.green,
+                                            duration: Duration(seconds: 2),
+                                          ),
+                                        );
+                                      }
+                                      return;
+                                    }
+                                    
+                                    // If we get here, verification failed
+                                    if (isDialogOpen && mounted) {
+                                      updateState();
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Error: ${e.toString()}'),
+                                          backgroundColor: Colors.red,
+                                          duration: const Duration(seconds: 3),
+                                        ),
+                                      );
+                                    }
+                                  } finally {
+                                    if (isDialogOpen) {
+                                      controller.isVerifyingOTP.value = false;
+                                      if (mounted) {
+                                        updateState();
+                                      }
+                                    }
+                                  }
+                                },
+                          child: controller.isVerifyingOTP.value
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text('Verify'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint('Error in OTP dialog: $e');
+    } finally {
+      // Mark dialog as closed before any async operations
+      isDialogOpen = false;
+      
+      // Use a post-frame callback to ensure safe disposal
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          otpController.dispose();
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -237,7 +408,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'plan_your_journey'.tr,
+                        'Plan Your Journey'.tr,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -246,7 +417,7 @@ class _TicketScreenState extends State<TicketScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'select_stations_below'.tr,
+                        'Select Stations Below'.tr,
                         style: TextStyle(
                           fontSize: 14,
                           color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
@@ -383,7 +554,7 @@ class _TicketScreenState extends State<TicketScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'travel_date'.tr,
+                  'Travel Date'.tr,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -552,7 +723,7 @@ class _TicketScreenState extends State<TicketScreen> {
                           Expanded(
                             child: Obx(() => Text(
                               controller.selectedDate.value == null
-                                  ? 'tap_to_select_date'.tr
+                                  ? 'Tap To Select Date'.tr
                                   : controller.formattedSelectedDate,
                               style: TextStyle(
                                 fontSize: 16.0,
@@ -586,20 +757,20 @@ class _TicketScreenState extends State<TicketScreen> {
                           // Forward direction (Sebeta -> Dire Dawa)
                           if (departureIndex < arrivalIndex) {
                             return Text(
-                              'forward_direction_days'.tr,
+                              'Forward Direction Days'.tr,
                               style: const TextStyle(fontSize: 12.0, color: Colors.grey),
                             );
                           } 
                           // Backward direction (Dire Dawa -> Sebeta)
                           else {
                             return Text(
-                              'backward_direction_days'.tr,
+                              'Backward Direction Days'.tr,
                               style: const TextStyle(fontSize: 12.0, color: Colors.grey),
                             );
                           }
                         } else if (departure != null && arrival != null) {
                           return Text(
-                            'select_valid_stations'.tr,
+                            'Select Valid Stations'.tr,
                             style: const TextStyle(fontSize: 12.0, color: Colors.grey),
                           );
                         } else {
@@ -620,9 +791,9 @@ class _TicketScreenState extends State<TicketScreen> {
 
           Obx(
             () => CustomRadioGroup(
-              title: 'nationality'.tr,
+              title: 'Nationality'.tr,
               groupValue: controller.selectedCitizenship.value,
-              options: const ['Ethiopian', 'Foreign', 'Djiboutian'].map((item) => item.tr).toList(),
+              options: const ['Ethiopian', 'Foreign', 'Djiboutian'],
               isEnabled: false,
               accentColor: Theme.of(context).primaryColor,
               foreignCountries: controller.foreignCountries,
@@ -658,29 +829,35 @@ class _TicketScreenState extends State<TicketScreen> {
                 ),
               ),
 
-              ElevatedButton(
-                onPressed:
-                    controller.isLoading.value ? null : controller.nextPage,
-                child: Obx(
-                  () =>
-                      controller.isLoading.value
-                          ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                              strokeWidth: 2,
+              Obx(() {
+                final isFormValid = _isFormValid(controller, controller.currentPage.value);
+                return ElevatedButton(
+                  onPressed: controller.isLoading.value || !isFormValid
+                      ? null 
+                      : controller.nextPage,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isFormValid && !controller.isLoading.value
+                        ? Theme.of(context).primaryColor
+                        : Colors.grey.shade400,
+                  ),
+                  child: controller.isLoading.value
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
                             ),
-                          )
-                          : Text(
-                            "Next",
-                            style: Theme.of(context).textTheme.bodyMedium!
-                                .copyWith(color: Colors.white),
+                            strokeWidth: 2,
                           ),
-                ),
-              ),
+                        )
+                      : Text(
+                          "Next",
+                          style: Theme.of(context).textTheme.bodyMedium!
+                              .copyWith(color: Colors.white),
+                        ),
+                );
+              }),
             ],
           ),
         ],
@@ -719,7 +896,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'traveler_details'.tr,
+                        'Traveler Details'.tr,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -728,7 +905,7 @@ class _TicketScreenState extends State<TicketScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'provide_personal_information'.tr,
+                        'Provide Personal Information'.tr,
                         style: TextStyle(
                           fontSize: 14,
                           color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
@@ -750,7 +927,7 @@ class _TicketScreenState extends State<TicketScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "first_name".tr,
+                      "First Name".tr,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -758,42 +935,53 @@ class _TicketScreenState extends State<TicketScreen> {
                       ),
                     ),
                     const SizedBox(height: 6.0),
-                    TextFormField(
-                      validator: (value) => value == null || value.isEmpty 
-                          ? 'first_name_required'.tr 
-                          : null,
-                      controller: controller.firstNameController,
-                      decoration: InputDecoration(
-                        hintText: 'enter_first_name'.tr,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                            width: 1.5,
+                    GetBuilder<TicketController>(
+                      builder: (controller) => TextFormField(
+                        controller: controller.firstNameController,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        decoration: InputDecoration(
+                          labelText: 'First Name',
+                          labelStyle: Theme.of(context).textTheme.labelMedium,
+                          hintText: 'Enter your first name',
+                          hintStyle: Theme.of(context).textTheme.labelMedium!.copyWith(
+                            color: isDark ? Colors.white54 : Colors.black54,
                           ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                            width: 1.5,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                              width: 1.5,
+                            ),
                           ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: Theme.of(context).primaryColor,
-                            width: 1.5,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                              width: 1.5,
+                            ),
                           ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).primaryColor,
+                              width: 1.5,
+                            ),
+                          ),
+                          prefixIcon: Icon(
+                            Icons.person_outline,
+                            color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
                         ),
-                        prefixIcon: Icon(
-                          Icons.person_outline_rounded,
-                          color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
-                          size: 20,
-                        ),
-                        filled: true,
-                        fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your first name';
+                          }
+                          return null;
+                        },
                       ),
                     ),
                   ],
@@ -806,7 +994,7 @@ class _TicketScreenState extends State<TicketScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "last_name".tr,
+                      "Last Name".tr,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -814,42 +1002,53 @@ class _TicketScreenState extends State<TicketScreen> {
                       ),
                     ),
                     const SizedBox(height: 6.0),
-                    TextFormField(
-                      validator: (value) => value == null || value.isEmpty 
-                          ? 'last_name_required'.tr 
-                          : null,
-                      controller: controller.lastNameController,
-                      decoration: InputDecoration(
-                        hintText: 'enter_last_name'.tr,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                            width: 1.5,
+                    GetBuilder<TicketController>(
+                      builder: (controller) => TextFormField(
+                        controller: controller.lastNameController,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        decoration: InputDecoration(
+                          labelText: 'Last Name',
+                          labelStyle: Theme.of(context).textTheme.labelMedium,
+                          hintText: 'Enter your last name',
+                          hintStyle: Theme.of(context).textTheme.labelMedium!.copyWith(
+                            color: isDark ? Colors.white54 : Colors.black54,
                           ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                            width: 1.5,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                              width: 1.5,
+                            ),
                           ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: Theme.of(context).primaryColor,
-                            width: 1.5,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                              width: 1.5,
+                            ),
                           ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).primaryColor,
+                              width: 1.5,
+                            ),
+                          ),
+                          prefixIcon: Icon(
+                            Icons.person_outline,
+                            color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
                         ),
-                        prefixIcon: Icon(
-                          Icons.person_outline_rounded,
-                          color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
-                          size: 20,
-                        ),
-                        filled: true,
-                        fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your last name';
+                          }
+                          return null;
+                        },
                       ),
                     ),
                   ],
@@ -864,7 +1063,7 @@ class _TicketScreenState extends State<TicketScreen> {
           Container(
             margin: const EdgeInsets.only(bottom: 12, top: 4),
             child: Text(
-              "contact_information".tr,
+              "Contact Information".tr,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -873,62 +1072,202 @@ class _TicketScreenState extends State<TicketScreen> {
             ),
           ),
           
-          // Email Field (Verified and Disabled)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.grey.shade800.withOpacity(0.7) : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.check_circle_outline_rounded,
-                    color: Colors.green,
-                    size: 20,
-                  ),
+          // Email Field with Verification
+          Obx(() {
+            final isVerified = controller.isEmailVerified.value;
+            final email = controller.emailController.text.trim().trim();
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey.shade800.withOpacity(0.7) : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isVerified 
+                      ? Colors.green.withOpacity(0.5)
+                      : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                  width: 1.5,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Email Input with Verify Button
+                  Row(
                     children: [
-                      Text(
-                        'verified_email'.tr,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      Expanded(
+                        child: GetBuilder<TicketController>(
+                          builder: (controller) => TextFormField(
+                            controller: controller.emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            decoration: InputDecoration(
+                              labelText: 'Email',
+                              labelStyle: Theme.of(context).textTheme.labelMedium,
+                              hintText: 'Enter your email',
+                              hintStyle: Theme.of(context).textTheme.labelMedium!.copyWith(
+                                color: isDark ? Colors.white54 : Colors.black54,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Theme.of(context).primaryColor,
+                                  width: 1.5,
+                                ),
+                              ),
+                              prefixIcon: Icon(
+                                Icons.email_outlined,
+                                color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
+                                size: 20,
+                              ),
+                              suffixIcon: controller.emailController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: Icon(
+                                        controller.isEmailVerified.value
+                                            ? Icons.verified
+                                            : Icons.verified_outlined,
+                                        color: controller.isEmailVerified.value
+                                            ? Colors.green
+                                            : (isDark ? Colors.white54 : Colors.black54),
+                                        size: 20,
+                                      ),
+                                      onPressed: () {
+                                        if (controller.emailController.text.isNotEmpty) {
+                                          _showOTPDialog();
+                                        }
+                                      },
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
+                            ),
+                            onChanged: (value) {
+                              // Reset verification status if email changes
+                              if (controller.verifiedEmail.value != value) {
+                                controller.isEmailVerified.value = false;
+                              }
+                            },
+                            validator: (value) {
+                              if (value != null && value.isNotEmpty && !GetUtils.isEmail(value)) {
+                                return 'Please enter a valid email address';
+                              }
+                              return null;
+                            },
+                          ),
                         ),
                       ),
-                      Text(
-                        controller.emailController.text,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: isDark ? Colors.white : Colors.black87,
+                      if (email.isNotEmpty && !isVerified)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Obx(() => controller.isSendingOTP.value
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : TextButton(
+                                  onPressed: () async {
+                                    final success = await controller.sendOTP();
+                                    if (success) {
+                                      _showOTPDialog();
+                                    } else {
+                                      // Show error message if OTP sending fails
+                                      Get.snackbar(
+                                        'Error',
+                                        'Failed to send OTP. Please try again.',
+                                        snackPosition: SnackPosition.BOTTOM,
+                                        backgroundColor: Colors.red,
+                                        colorText: Colors.white,
+                                      );
+                                    }
+                                  },
+                                  child: Text(
+                                    'Verify',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Theme.of(context).primaryColor,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    minimumSize: const Size(80, 36),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      side: BorderSide(
+                                        color: Theme.of(context).primaryColor.withOpacity(0.3),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                          ),
                         ),
-                      ),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ),
+                  
+                  // Verification Status
+                  if (email.isNotEmpty && isVerified)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.verified_rounded,
+                            color: Colors.green,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Email verified',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (controller.otpError.value.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        controller.otpError.value,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+      );}),
           
           // Phone Number Field
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "phone_number".tr,
+                "Phone Number".tr,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -936,44 +1275,55 @@ class _TicketScreenState extends State<TicketScreen> {
                 ),
               ),
               const SizedBox(height: 6.0),
-              TextFormField(
-                validator: (value) => value == null || value.isEmpty 
-                    ? 'phone_number_required'.tr 
-                    : null,
-                controller: controller.phoneController,
-                decoration: InputDecoration(
-                  hintText: 'enter_phone_number'.tr,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                      width: 1.5,
+              GetBuilder<TicketController>(
+                builder: (controller) => TextFormField(
+                  controller: controller.phoneController,
+                  keyboardType: TextInputType.phone,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  decoration: InputDecoration(
+                    labelText: 'Phone Number',
+                    labelStyle: Theme.of(context).textTheme.labelMedium,
+                    hintText: 'Enter your phone number',
+                    hintStyle: Theme.of(context).textTheme.labelMedium!.copyWith(
+                      color: isDark ? Colors.white54 : Colors.black54,
                     ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                      width: 1.5,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                        width: 1.5,
+                      ),
                     ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Theme.of(context).primaryColor,
-                      width: 1.5,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                        width: 1.5,
+                      ),
                     ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).primaryColor,
+                        width: 1.5,
+                      ),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.phone_rounded,
+                      color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
+                      size: 20,
+                    ),
+                    filled: true,
+                    fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
                   ),
-                  prefixIcon: Icon(
-                    Icons.phone_rounded,
-                    color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
-                    size: 20,
-                  ),
-                  filled: true,
-                  fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your phone number';
+                    }
+                    return null;
+                  },
                 ),
-                keyboardType: TextInputType.phone,
               ),
             ],
           ),
@@ -985,30 +1335,9 @@ class _TicketScreenState extends State<TicketScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Passport Information Header
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.badge_rounded,
-                          size: 18,
-                          color: Theme.of(context).primaryColor,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "passport_information".tr,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  // Passport Number
                   Text(
-                    "passport_number".tr,
+                    "Passport Number".tr,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -1016,41 +1345,53 @@ class _TicketScreenState extends State<TicketScreen> {
                     ),
                   ),
                   const SizedBox(height: 6.0),
-                  TextFormField(
-                    validator: (value) => controller.selectedCitizenship.value == 'Ethiopian' ? null : 
-                      (value == null || value.isEmpty ? 'passport_number_required'.tr : null),
-                    controller: controller.passportController,
-                    decoration: InputDecoration(
-                      hintText: 'enter_passport_number'.tr,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                          width: 1.5,
+                  GetBuilder<TicketController>(
+                    builder: (controller) => TextFormField(
+                      controller: controller.passportController,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      decoration: InputDecoration(
+                        labelText: 'Passport Number'.tr,
+                        labelStyle: Theme.of(context).textTheme.labelMedium,
+                        hintText: 'Enter your passport number',
+                        hintStyle: Theme.of(context).textTheme.labelMedium!.copyWith(
+                          color: isDark ? Colors.white54 : Colors.black54,
                         ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                          width: 1.5,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                            width: 1.5,
+                          ),
                         ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Theme.of(context).primaryColor,
-                          width: 1.5,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                            width: 1.5,
+                          ),
                         ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                            width: 1.5,
+                          ),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.credit_card,
+                          color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
+                          size: 20,
+                        ),
+                        filled: true,
+                        fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
                       ),
-                      prefixIcon: Icon(
-                        Icons.badge_outlined,
-                        color: isDark ? Colors.white70 : Theme.of(context).primaryColor.withOpacity(0.7),
-                        size: 20,
-                      ),
-                      filled: true,
-                      fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your passport number';
+                        }
+                        return null;
+                      },
                     ),
                   ),
                 ],
@@ -1073,13 +1414,50 @@ class _TicketScreenState extends State<TicketScreen> {
                 ),
               ),
 
-              ElevatedButton(
-                onPressed:
-                    controller.isLoading.value ? null : controller.nextPage,
-                child: Obx(
-                  () =>
-                      controller.isLoading.value
-                          ? const SizedBox(
+              // Use GetBuilder to react to controller updates
+              GetBuilder<TicketController>(
+                builder: (controller) {
+                  // Check if email is verified (if email is provided)
+                  final email = controller.emailController.text.trim();
+                  final isEmailValid = email.isEmpty || 
+                      (controller.isEmailVerified.value && 
+                       controller.verifiedEmail.value == email);
+                  
+                  // Check all required fields
+                  final isFormValid = 
+                      controller.firstNameController.text.trim().isNotEmpty &&
+                      controller.lastNameController.text.trim().isNotEmpty &&
+                      controller.phoneController.text.trim().isNotEmpty &&
+                      (controller.selectedCitizenship.value != 'Ethiopian' 
+                          ? controller.passportController.text.trim().isNotEmpty 
+                          : true) &&
+                      isEmailValid;
+                  
+                  // Log for debugging
+                  debugPrint('Form validation - '
+                      'First: ${controller.firstNameController.text.isNotEmpty}, '
+                      'Last: ${controller.lastNameController.text.isNotEmpty}, '
+                      'Phone: ${controller.phoneController.text.isNotEmpty}, '
+                      'Passport: ${controller.passportController.text.isNotEmpty}, '
+                      'Email: $isEmailValid, '
+                      'Form valid: $isFormValid');
+                  
+                  return ElevatedButton(
+                    onPressed: controller.isLoading.value || !isFormValid
+                        ? null
+                        : controller.nextPage,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isFormValid && !controller.isLoading.value
+                          ? Theme.of(context).primaryColor
+                          : Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      elevation: 2,
+                    ),
+                    child: controller.isLoading.value
+                        ? const SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
@@ -1087,14 +1465,18 @@ class _TicketScreenState extends State<TicketScreen> {
                                 Colors.white,
                               ),
                               strokeWidth: 2,
-                            ),
-                          )
-                          : Text(
-                            "Next",
-                            style: Theme.of(context).textTheme.bodyMedium!
-                                .copyWith(color: Colors.white),
                           ),
-                ),
+                        )
+                      : const Text(
+                            "Next",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  );
+                },
               ),
             ],
           ),
@@ -1134,7 +1516,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'select_your_seat'.tr,
+                        'Select Your Seat'.tr,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -1143,7 +1525,7 @@ class _TicketScreenState extends State<TicketScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'choose_seat_type_and_position'.tr,
+                        'Choose Seat Type And Position'.tr,
                         style: TextStyle(
                           fontSize: 14,
                           color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
@@ -1158,7 +1540,7 @@ class _TicketScreenState extends State<TicketScreen> {
 
           // Seat Type Selection Cards
           Text(
-            "seat_type".tr,
+            "Seat Type".tr,
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -1215,7 +1597,7 @@ class _TicketScreenState extends State<TicketScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            "regular_seat".tr,
+                            "Regular Seat".tr,
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: controller.selectedSeatType.value == 'regular'
@@ -1284,7 +1666,7 @@ class _TicketScreenState extends State<TicketScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            "economic_bed".tr,
+                            "Economic Bed".tr,
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: controller.selectedSeatType.value == 'economic'
@@ -1353,7 +1735,7 @@ class _TicketScreenState extends State<TicketScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            "vip_bed".tr,
+                            "VIP Bed".tr,
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: controller.selectedSeatType.value == 'vip'
@@ -1427,7 +1809,7 @@ class _TicketScreenState extends State<TicketScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'price_summary'.tr,
+                        'Price Summary'.tr,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -1443,7 +1825,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'seat_type'.tr,
+                        'Seat Type'.tr,
                         style: TextStyle(
                           fontSize: 14,
                           color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
@@ -1451,10 +1833,10 @@ class _TicketScreenState extends State<TicketScreen> {
                       ),
                       Text(
                         controller.selectedSeatType.value == 'regular'
-                            ? 'regular_seat'.tr
+                            ? 'Regular Seat'.tr
                             : controller.selectedSeatType.value == 'economic'
-                                ? 'economic_bed'.tr
-                                : 'vip_bed'.tr,
+                                ? 'Economic Bed'.tr
+                                : 'VIP Bed'.tr,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -1473,7 +1855,7 @@ class _TicketScreenState extends State<TicketScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'position'.tr,
+                              'Position'.tr,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
@@ -1481,7 +1863,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             ),
                             Text(
                               controller.selectedBedPosition.value.isEmpty
-                                  ? 'not_selected'.tr
+                                  ? 'Not Selected'.tr
                                   : '${controller.selectedBedPosition.value.substring(0, 1).toUpperCase()}${controller.selectedBedPosition.value.substring(1)}',
                               style: TextStyle(
                                 fontSize: 14,
@@ -1506,7 +1888,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'total_price'.tr,
+                        'Total Price'.tr,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -1548,7 +1930,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             : (isDark ? Colors.white : Colors.black87),
                       ),
                       label: Text(
-                        'back'.tr,
+                        'Back'.tr,
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
@@ -1610,7 +1992,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'processing'.tr,
+                                'Processing'.tr,
                                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                             ],
@@ -1619,7 +2001,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'book_ticket'.tr,
+                                'Book Ticket'.tr,
                                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                               const SizedBox(width: 8),
@@ -1704,7 +2086,7 @@ class _TicketScreenState extends State<TicketScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'e_ticket'.tr.toUpperCase(),
+                          'E Ticket'.tr.toUpperCase(),
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -1714,7 +2096,7 @@ class _TicketScreenState extends State<TicketScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'booking_confirmed'.tr,
+                          'Booking Confirmed'.tr,
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -1742,7 +2124,7 @@ class _TicketScreenState extends State<TicketScreen> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'paid'.tr,
+                          'Paid'.tr,
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -1799,7 +2181,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'scan_for_verification'.tr,
+                      'Scan For Verification'.tr,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -1860,7 +2242,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'journey_details'.tr,
+                      'Journey Details'.tr,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -1876,7 +2258,7 @@ class _TicketScreenState extends State<TicketScreen> {
                         border: Border.all(color: Colors.amber.withOpacity(0.3)),
                       ),
                       child: Text(
-                        'unused'.tr,
+                        'Unused'.tr,
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -1922,7 +2304,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'from'.tr,
+                                    'From'.tr,
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -1930,7 +2312,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Obx(() => Text(
-                                    controller.selectedDepartureStation.value ?? 'not_selected'.tr,
+                                    controller.selectedDepartureStation.value ?? 'Not Selected'.tr,
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -1975,7 +2357,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'to'.tr,
+                                    'To'.tr,
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -1983,7 +2365,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Obx(() => Text(
-                                    controller.selectedArrivalStation.value ?? 'not_selected'.tr,
+                                    controller.selectedArrivalStation.value ?? 'Not Selected'.tr,
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -2038,7 +2420,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'date'.tr,
+                                        'Date'.tr,
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2048,7 +2430,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                       Obx(() => Text(
                                         controller.selectedDate.value != null
                                             ? "${controller.selectedDate.value!.day}/${controller.selectedDate.value!.month}/${controller.selectedDate.value!.year}"
-                                            : 'not_selected'.tr,
+                                            : 'Not Selected'.tr,
                                         style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
@@ -2100,7 +2482,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'time'.tr,
+                                        'Time'.tr,
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2161,7 +2543,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                'passenger_details'.tr,
+                                'Passenger Details'.tr,
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -2180,7 +2562,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'name'.tr,
+                                      'Name'.tr,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2204,7 +2586,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'citizenship'.tr,
+                                      'Citizenship'.tr,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2234,7 +2616,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'phone'.tr,
+                                      'Phone'.tr,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2257,7 +2639,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'email'.tr,
+                                      'Email'.tr,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2317,7 +2699,7 @@ class _TicketScreenState extends State<TicketScreen> {
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                'seat_details'.tr,
+                                'Seat Details'.tr,
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -2336,7 +2718,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'seat_type'.tr,
+                                      'Seat Type'.tr,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2359,7 +2741,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'position'.tr,
+                                      'Position'.tr,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2369,7 +2751,7 @@ class _TicketScreenState extends State<TicketScreen> {
                                     Obx(() => Text(
                                       controller.selectedBedPosition.value != null
                                           ? controller.selectedBedPosition.value!.toString().capitalizeFirst!
-                                          : 'not_selected'.tr,
+                                          : 'Not Selected'.tr,
                                       style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w600,
@@ -2407,7 +2789,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'citizenship'.tr,
+                                'Citizenship'.tr,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2431,7 +2813,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'issued_at'.tr,
+                                'Issued At'.tr,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2469,7 +2851,7 @@ class _TicketScreenState extends State<TicketScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'total_price'.tr,
+                      'Total Price'.tr,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -2526,7 +2908,7 @@ class _TicketScreenState extends State<TicketScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'payment_method'.tr,
+                'Payment Method'.tr,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -2572,7 +2954,7 @@ class _TicketScreenState extends State<TicketScreen> {
                             ),
                           ),
                           Text(
-                            'secure_online_payment'.tr,
+                            'Secure Online Payment'.tr,
                             style: TextStyle(
                               fontSize: 12,
                               color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -2595,92 +2977,74 @@ class _TicketScreenState extends State<TicketScreen> {
         ),
         
         // Navigation buttons
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            TextButton(
-              onPressed: controller.isLoading.value ? null : () {
-                // Show confirmation dialog when back button is pressed
-                showDialog(
-                  context: context,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      title: Row(
-                        children: [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 10),
-                          Text('ticket_confirmed'.tr),
-                        ],
-                      ),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ticket_email_sent'.tr),
-                          const SizedBox(height: 8),
-                          Text(
-                            controller.emailController.text,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 16),
-                          Text('ticket_verification_info'.tr),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop(); // Close dialog
-                            controller.previousPage(); // Go back
-                          },
-                          child: Text('continue'.tr),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-              child: Text(
-                "back".tr,
-                style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                  color: controller.isLoading.value 
-                      ? Colors.grey 
-                      : Theme.of(context).brightness == Brightness.dark 
-                          ? Colors.white70 
-                          : Colors.black,
+        Obx(() {
+          final currentPage = controller.currentPage.value;
+          final isLastPage = currentPage == 3; // Assuming 4 steps (0-3)
+          final isFormValid = _isFormValid(controller, currentPage);
+          
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Back button
+              TextButton(
+                onPressed: controller.isLoading.value || currentPage == 0 
+                    ? null 
+                    : () {
+                        controller.previousPage();
+                      },
+                child: Text(
+                  "back".tr,
+                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                    color: controller.isLoading.value || currentPage == 0
+                        ? Colors.grey 
+                        : Theme.of(context).brightness == Brightness.dark 
+                            ? Colors.white70 
+                            : Colors.black,
+                  ),
                 ),
               ),
-            ),
-            ElevatedButton(
-              onPressed: controller.isLoading.value ? null : () {
-                // Handle payment processing
-                controller.isLoading.value = true;
-                // Simulate payment processing
-                Future.delayed(const Duration(seconds: 2), () {
-                  controller.isLoading.value = false;
-                  // Navigate to payment success page or show success dialog
-                  Get.snackbar(
-                    'payment_successful'.tr,
-                    'ticket_booked_successfully'.tr,
-                    backgroundColor: Colors.green,
-                    colorText: Colors.white,
-                    snackPosition: SnackPosition.BOTTOM,
-                    margin: const EdgeInsets.all(16),
-                    borderRadius: 12,
-                    duration: const Duration(seconds: 3),
-                  );
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: Obx(
-                () => controller.isLoading.value
+              
+              // Next/Submit button
+              ElevatedButton(
+                onPressed: controller.isLoading.value || !isFormValid
+                    ? null
+                    : () {
+                        if (currentPage < 3) {
+                          controller.nextPage();
+                        } else {
+                          // Handle form submission
+                          controller.isLoading.value = true;
+                          // Simulate payment processing
+                          Future.delayed(const Duration(seconds: 2), () {
+                            controller.isLoading.value = false;
+                            // Show success message
+                            Get.snackbar(
+                              'payment_successful'.tr,
+                              'ticket_booked_successfully'.tr,
+                              backgroundColor: Colors.green,
+                              colorText: Colors.white,
+                              snackPosition: SnackPosition.BOTTOM,
+                              margin: const EdgeInsets.all(16),
+                              borderRadius: 12,
+                              duration: const Duration(seconds: 3),
+                            );
+                          });
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  backgroundColor: isFormValid && !controller.isLoading.value
+                      ? Theme.of(context).primaryColor
+                      : Colors.grey.shade400,
+                  elevation: 3,
+                  shadowColor: isFormValid && !controller.isLoading.value
+                      ? Theme.of(context).primaryColor.withOpacity(0.3)
+                      : Colors.transparent,
+                ),
+                child: controller.isLoading.value
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -2695,7 +3059,7 @@ class _TicketScreenState extends State<TicketScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'processing_payment'.tr,
+                            'processing'.tr,
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                           ),
                         ],
@@ -2704,129 +3068,209 @@ class _TicketScreenState extends State<TicketScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'pay_now'.tr,
+                            isLastPage ? 'submit'.tr : 'next'.tr,
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                           ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.payment, size: 18),
+                          if (!isLastPage) ...[
+                            const SizedBox(width: 8),
+                            const Icon(Icons.arrow_forward_rounded, size: 18),
+                          ],
                         ],
                       ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        }),
       ],
     );
   }
   
+  // Check if current form is valid based on current page
+  bool _isFormValid(TicketController controller, int currentStep) {
+    switch (currentStep) {
+      case 0: // Travel Details
+        return controller.selectedDepartureStation.value != null &&
+               controller.selectedArrivalStation.value != null &&
+               controller.selectedDate.value != null;
+      case 1: // Personal Info
+        final email = controller.emailController.text.trim();
+        final isEmailValid = email.isEmpty || 
+            (controller.isEmailVerified.value && 
+             controller.verifiedEmail.value == email);
+            
+        return controller.firstNameController.text.isNotEmpty &&
+               controller.lastNameController.text.isNotEmpty &&
+               controller.phoneController.text.isNotEmpty &&
+               (controller.selectedCitizenship.value != 'Foreign' || 
+                controller.passportController.text.isNotEmpty) &&
+               isEmailValid;
+      case 2: // Seat Selection
+        return controller.selectedSeatType.value.isNotEmpty &&
+               (controller.selectedSeatType.value == 'regular' || 
+                controller.selectedBedPosition.value.isNotEmpty);
+      default:
+        return true;
+    }
+  }
+
   Widget _buildProgressBar(int currentStep) {
     final int totalSteps = 4;
-    final List<String> stepTitles = ['travel_details'.tr, 'personal_info'.tr, 'seat_selection'.tr, 'confirmation'.tr];
+    final List<String> stepTitles = ['Travel Details'.tr, 'Personal Info'.tr, 'Seat Selection'.tr, 'Confirmation'.tr];
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final controller = Get.find<TicketController>();
     
-    return Column(
-      children: [
-        // Enhanced progress bar
-        Stack(
-          children: [
-            // Background track
-            Container(
-              width: double.infinity,
-              height: 6,
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(10),
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900.withOpacity(0.5) : Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Progress bar with animation
+          Container(
+            height: 8,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(10),
             ),
-            
-            // Progress indicator
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeInOut,
-              width: MediaQuery.of(context).size.width * 
-                  ((currentStep + 1) / totalSteps) - 48, // Adjust for padding
-              height: 6,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).primaryColor.withOpacity(0.8),
-                    Theme.of(context).primaryColor,
-                  ],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(context).primaryColor.withOpacity(0.3),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Step markers
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(
-                totalSteps,
-                (index) => Container(
-                  width: 16,
-                  height: 16,
+            child: Stack(
+              children: [
+                // Background track
+                Container(
+                  width: double.infinity,
+                  height: 8,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: index <= currentStep 
-                        ? Theme.of(context).primaryColor 
-                        : isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-                    border: Border.all(
-                      color: isDark ? Colors.grey.shade800 : Colors.white,
-                      width: 2,
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                
+                // Progress indicator with gradient and animation
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOut,
+                  width: (MediaQuery.of(context).size.width - 32) * 
+                      ((currentStep + 1) / totalSteps),
+                  height: 8,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Theme.of(context).primaryColor.withOpacity(0.9),
+                        Theme.of(context).primaryColor,
+                        Theme.of(context).primaryColor.withOpacity(0.9),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                     ),
-                    boxShadow: index <= currentStep ? [
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
                       BoxShadow(
                         color: Theme.of(context).primaryColor.withOpacity(0.3),
-                        blurRadius: 4,
+                        blurRadius: 8,
+                        spreadRadius: 1,
                         offset: const Offset(0, 2),
                       ),
-                    ] : null,
+                    ],
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-        
-        // Step titles
-        Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: Row(
+          ),
+          
+          // Step indicators and titles
+          const SizedBox(height: 16),
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: List.generate(
               totalSteps,
-              (index) => Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    left: index == 0 ? 0 : 4,
-                    right: index == totalSteps - 1 ? 0 : 4,
-                  ),
-                  child: Text(
-                    stepTitles[index],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: index <= currentStep ? FontWeight.bold : FontWeight.normal,
-                      color: index <= currentStep
-                          ? (isDark ? Colors.white : Theme.of(context).primaryColor)
-                          : (isDark ? Colors.grey.shade500 : Colors.grey.shade600),
+              (index) => GestureDetector(
+                onTap: () {
+                  // Only allow tapping on completed or current steps
+                  if (index <= currentStep) {
+                    controller.currentPage.value = index;
+                  }
+                },
+                child: Column(
+                  children: [
+                    // Step indicator
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: index <= currentStep
+                            ? Theme.of(context).primaryColor
+                            : isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                        border: Border.all(
+                          color: isDark ? Colors.grey.shade600 : Colors.white,
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          if (index <= currentStep)
+                            BoxShadow(
+                              color: Theme.of(context).primaryColor.withOpacity(0.3),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                              offset: const Offset(0, 2),
+                            ),
+                        ],
+                      ),
+                      child: Center(
+                        child: index < currentStep
+                            ? Icon(
+                                Icons.check,
+                                size: 16,
+                                color: Colors.white,
+                              )
+                            : Text(
+                                '${index + 1}',
+                                style: TextStyle(
+                                  color: index <= currentStep
+                                      ? Colors.white
+                                      : isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
                     ),
-                  ),
+                    // Step title
+                    const SizedBox(height: 8),
+                    Text(
+                      stepTitles[index],
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: index == currentStep ? FontWeight.bold : FontWeight.normal,
+                        color: index <= currentStep
+                            ? (isDark ? Colors.white : Theme.of(context).primaryColor)
+                            : (isDark ? Colors.grey.shade500 : Colors.grey.shade500),
+                      ),
+                    ),
+                    // Connection line (except for last step)
+                    if (index < totalSteps - 1)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        height: 2,
+                        width: 20,
+                        color: index < currentStep 
+                            ? Theme.of(context).primaryColor.withOpacity(0.5)
+                            : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
   
@@ -2873,7 +3317,8 @@ class _TicketScreenState extends State<TicketScreen> {
             childAspectRatio: 1.0,
             children: positions.map((position) {
               final String fullPosition = "${type.toLowerCase()}_$position";
-              final bool isSelected = controller.selectedBedPosition.value == position;
+              final bool isSelected = controller.selectedBedPosition.value == position && 
+                                   controller.selectedSeatType.value == type.toLowerCase();
               
               // Get appropriate icon based on position
               IconData positionIcon = position == 'upper'
@@ -2883,7 +3328,11 @@ class _TicketScreenState extends State<TicketScreen> {
                       : Icons.arrow_downward_rounded;
                       
               return GestureDetector(
-                onTap: () => controller.setSelectedBedPosition(position),
+                onTap: () {
+                  // Set both seat type and bed position
+                  controller.setSelectedSeatType(type.toLowerCase());
+                  controller.setSelectedBedPosition(position);
+                },
                 child: Container(
                   decoration: BoxDecoration(
                     color: isDark ? Colors.grey.shade800 : Colors.white,
@@ -2938,7 +3387,9 @@ class _TicketScreenState extends State<TicketScreen> {
                       // Price
                       const SizedBox(height: 4),
                       Text(
-                        "ETB ${controller.seatPrices[fullPosition]!.toStringAsFixed(0)}",
+                        controller.seatPrices[fullPosition] != null 
+                            ? "ETB ${controller.seatPrices[fullPosition]!.toStringAsFixed(0)}"
+                            : "Price N/A",
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,

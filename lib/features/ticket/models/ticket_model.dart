@@ -20,6 +20,13 @@ class TicketModel {
   final String? accessToken;
   final String? ticketCode;
   final int? expiresAt;
+  
+  // Payment related fields
+  final String paymentStatus; // 'pending', 'processing', 'completed', 'failed'
+  final String? paymentId;    // ID from payment provider
+  final String? paymentMethod; // Method used for payment (e.g., 'card', 'mobile_money')
+  final DateTime? paymentDate; // When payment was completed
+  final String? paymentReference; // Reference code for payment confirmation
 
   TicketModel({
     this.id,
@@ -41,6 +48,11 @@ class TicketModel {
     this.ticketCode,
     this.expiresAt,
     DateTime? createdAt,
+    this.paymentStatus = 'pending',
+    this.paymentId,
+    this.paymentMethod,
+    this.paymentDate,
+    this.paymentReference,
   }) : this.createdAt = createdAt ?? DateTime.now();
 
   // Convert model to JSON
@@ -57,15 +69,22 @@ class TicketModel {
       'seatType': seatType,
       'bedPosition': bedPosition,
       'price': price,
-      'status': 'confirmed', // Always save as confirmed
+      'status': status, // Use the status passed in constructor
       'citizenship': citizenship,
       'createdAt': Timestamp.fromDate(createdAt),
       'ticket_number': ticket_number,
+      'paymentStatus': paymentStatus,
     };
 
     // Add only the accessToken and expiresAt (not ticketCode, isVerified, verifiedAt)
     if (accessToken != null) json['accessToken'] = accessToken;
     if (expiresAt != null) json['expiresAt'] = expiresAt;
+    
+    // Add payment-related fields if available
+    if (paymentId != null) json['paymentId'] = paymentId;
+    if (paymentMethod != null) json['paymentMethod'] = paymentMethod;
+    if (paymentDate != null) json['paymentDate'] = Timestamp.fromDate(paymentDate!);
+    if (paymentReference != null) json['paymentReference'] = paymentReference;
     
     return json;
   }
@@ -92,6 +111,11 @@ class TicketModel {
       ticketCode: json['ticketCode'],
       expiresAt: json['expiresAt'],
       createdAt: (json['createdAt'] is Timestamp) ? (json['createdAt'] as Timestamp).toDate() : DateTime.now(),
+      paymentStatus: json['paymentStatus'] ?? 'pending',
+      paymentId: json['paymentId'],
+      paymentMethod: json['paymentMethod'],
+      paymentDate: (json['paymentDate'] is Timestamp) ? (json['paymentDate'] as Timestamp).toDate() : null,
+      paymentReference: json['paymentReference'],
     );
   }
 
@@ -116,6 +140,11 @@ class TicketModel {
     String? accessToken,
     String? ticketCode,
     int? expiresAt,
+    String? paymentStatus,
+    String? paymentId,
+    String? paymentMethod,
+    DateTime? paymentDate,
+    String? paymentReference,
   }) {
     return TicketModel(
       id: id ?? this.id,
@@ -137,6 +166,11 @@ class TicketModel {
       accessToken: accessToken ?? this.accessToken,
       ticketCode: ticketCode ?? this.ticketCode,
       expiresAt: expiresAt ?? this.expiresAt,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      paymentId: paymentId ?? this.paymentId,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentDate: paymentDate ?? this.paymentDate,
+      paymentReference: paymentReference ?? this.paymentReference,
     );
   }
 }

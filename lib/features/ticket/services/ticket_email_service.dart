@@ -1,20 +1,24 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_2/features/ticket/models/ticket_model.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_application_2/features/ticket/models/ticket_model.dart';
 
-/// A minimal ticket email service that sends only the ticket number
+/// Service for sending ticket emails using Supabase Edge Functions
 class TicketEmailService {
-  // EmailJS credentials that we know work based on the logs
-  static const String serviceId = 'service_cazg1yi';
-  static const String userId = 'J5_0snPB0vsaB6jBG';
+  static final TicketEmailService _instance = TicketEmailService._internal();
+  final _supabase = Supabase.instance.client;
   
-  /// Send just the ticket number to the user's email
+  factory TicketEmailService() {
+    return _instance;
+  }
+  
+  TicketEmailService._internal();
+  
+  /// Send ticket email with the ticket number using Supabase Edge Function
   /// Returns true if email sent successfully, false otherwise
-  static Future<bool> sendTicketEmail(TicketModel ticket) async {
+  Future<bool> sendTicketEmail(TicketModel ticket) async {
     try {
-      debugPrint('📧 Sending minimal ticket email to ${ticket.email}');
+      debugPrint('📧 Sending ticket email to ${ticket.email}');
       
       // Show sending notification
       Get.snackbar(
@@ -29,72 +33,52 @@ class TicketEmailService {
       // Ensure we have a ticket number
       if (ticket.ticket_number == null || ticket.ticket_number!.isEmpty) {
         debugPrint('❌ Error: No ticket number available');
+        _showErrorSnackbar('No ticket number available');
         return false;
       }
-      
-      // Use EmailJS with minimal parameters - this is a direct approach based on what works
-      final response = await http.post(
-        Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-        headers: {
-          'Content-Type': 'application/json',
-          'origin': 'http://localhost',
-        },
-        body: jsonEncode({
-          'service_id': serviceId,
-          'template_id': 'template_ib3l7k9',  // This template is known to work from logs
-          'user_id': userId,
-          'template_params': {
-            'to_email': ticket.email,
-            'subject': 'Your Ticket Number', 
-            // Only include the ticket number and nothing else
-            'otp_code': ticket.ticket_number,
-          },
-        }),
-      );
 
-      if (response.statusCode == 200) {
+      // Call the Supabase Edge Function to send the email
+      final response = await _supabase.functions.invoke('send-ticket-email', body: {
+        'email': ticket.email,
+        'ticketNumber': ticket.ticket_number!,
+        'passengerName': '${ticket.firstName} ${ticket.lastName}'.trim(),
+      });
+
+      if (response.status == 200) {
         debugPrint('✅ Email sent successfully');
         
         // Success notification
         Get.snackbar(
           'Email Sent',
-          'Ticket sent to ${ticket.email}',
+          'Your ticket has been sent to ${ticket.email}',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
           colorText: Colors.white,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         );
-        
         return true;
       } else {
-        debugPrint('❌ Failed to send email: ${response.body}');
-        
-        // Error notification
-        Get.snackbar(
-          'Email Error',
-          'Failed to send ticket. Please try again.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
-        );
-        
+        final errorData = response.data as Map<String, dynamic>?;
+        final errorMessage = errorData?['error'] ?? 'Failed to send email';
+        debugPrint('❌ Failed to send email: $errorMessage');
+        _showErrorSnackbar(errorMessage);
         return false;
       }
     } catch (e) {
-      debugPrint('❌ Exception sending email: $e');
-      
-      // Exception notification
-      Get.snackbar(
-        'Email Error',
-        'An error occurred while sending the ticket',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 2),
-      );
-      
+      debugPrint('❌ Error sending email: $e');
+      _showErrorSnackbar('An error occurred while sending the email');
       return false;
     }
+  }
+  
+  void _showErrorSnackbar(String message) {
+    Get.snackbar(
+      'Email Error',
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.red,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
   }
 }

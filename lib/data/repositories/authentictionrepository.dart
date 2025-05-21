@@ -1,4 +1,3 @@
-import 'package:flutter_application_2/features/authentication/screens/onBording/onbording_screen.dart';
 import 'package:flutter_application_2/home.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
@@ -8,13 +7,7 @@ class AuthenticationRepository extends GetxController {
 
   @override
   void onReady() {
-    // TODO: implement onReady
-    screenRedirect();
+    // Redirect to home screen
+    Get.offAll(const Home());
   }
-}
-
-void screenRedirect() {
-  final deviceStorage = GetStorage();
-  final isFirstTime = deviceStorage.read('isFirstTime') ?? true;
-  isFirstTime ? Get.offAll(const OnbordingScreen()) : Get.offAll(const Home());
 }

@@ -27,6 +27,10 @@ Map<String, String> omET = {
   'enter_email_address': 'Teessoo imeelii kee galchi',
   'email_required': 'Imeeliin ni barbaachisa',
   'enter_valid_email': 'Maaloo imeelii sirrii galchi',
+  'email_verified': 'Imeelii mirkaneeffame',
+  'email_not_verified': 'Imeelii hin mirkaneeffamne',
+  'verify_email': 'Imeelii mirkaneessi',
+  'enter_email': 'Teessoo imeelii galchi',
   
   // OTP
   'otp_verification': 'Mirkaneessa Koodii',

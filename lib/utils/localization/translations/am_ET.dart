@@ -27,6 +27,10 @@ Map<String, String> amET = {
   'enter_email_address': 'የኢሜይል አድራሻዎን ያስገቡ',
   'email_required': 'ኢሜይል ያስፈልጋል',
   'enter_valid_email': 'እባክዎን ትክክለኛ ኢሜይል ያስገቡ',
+  'email_verified': 'ኢሜይል ተረጋግጧል',
+  'email_not_verified': 'ኢሜይል አልተረጋገጠም',
+  'verify_email': 'ኢሜይል ያረጋግጡ',
+  'enter_email': 'የኢሜይል አድራሻ ያስገቡ',
   
   // OTP
   'otp': 'አንድ ጊዜ ማስረጃ ኮድ',

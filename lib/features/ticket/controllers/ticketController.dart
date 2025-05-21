@@ -2,821 +2,497 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'dart:math';
+import 'dart:convert';
+import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+// Repositories
 import '../../../data/repositories/ticket_repositories.dart';
 import '../../../features/price/repositories/price_repository.dart';
 import '../../../features/price/models/price_model.dart';
 import '../models/ticket_model.dart';
 import '../screen/ticket_view_screen.dart';
 import '../services/ticket_email_service.dart';
+import '../../../features/payment/screens/payment_screen.dart';
+import '../../../features/payment/controllers/payment_controller.dart';
+import 'package:flutter_application_2/services/otp_service.dart';
 
 class TicketController extends GetxController {
   static TicketController get to => Get.find();
 
-  // Text Controllers
-  final TextEditingController departureController = TextEditingController();
-  final TextEditingController arrivalController = TextEditingController();
-  final TextEditingController dateController = TextEditingController();
-  final TextEditingController firstNameController = TextEditingController();
-  final TextEditingController lastNameController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController phoneController = TextEditingController();
-  final TextEditingController passportController = TextEditingController();
-  final TextEditingController seatController = TextEditingController();
-  final TextEditingController priceController = TextEditingController();
-  final TextEditingController statusController = TextEditingController();
-  final TextEditingController selectedCitizenshipController =
-      TextEditingController();
+  // Text Controllers with reactive updates
+  late final TextEditingController departureController;
+  late final TextEditingController arrivalController;
+  late final TextEditingController dateController;
+  late final TextEditingController firstNameController;
+  late final TextEditingController lastNameController;
+  late final TextEditingController emailController;
+  late final TextEditingController phoneController;
+  late final TextEditingController passportController;
+  late final TextEditingController seatController;
+  late final TextEditingController priceController;
+  late final TextEditingController statusController;
+  late final TextEditingController selectedCitizenshipController;
 
   // Repositories
   final TicketRepository _ticketRepo = TicketRepository();
   final PriceRepository _priceRepo = PriceRepository();
+  final TicketEmailService _emailService = TicketEmailService();
+
+  // OTP Verification
+  final RxBool isEmailVerified = false.obs;
+  final OTPService _otpService = OTPService();
+  final RxBool isSendingOTP = false.obs;
+  final RxBool isVerifyingOTP = false.obs;
+  final RxString otpError = ''.obs;
+  final RxString otpCode = ''.obs;
+  final RxString verifiedEmail = ''.obs;
+
+  // Form Key
+  final GlobalKey<FormState> formKey = GlobalKey<FormState>();
+
+  // Citizen and Country Selection
+  final RxString selectedCitizenship = 'Ethiopian'.obs;
+  final RxString selectedForeignCountry = ''.obs;
+  final List<String> foreignCountries = [
+    'Djiboutian',
+    'Kenyan',
+    'Sudanese',
+    'Other'
+  ];
+
+  // Seat Selection
+  final RxString selectedSeatType = 'regular'.obs;
+  final RxString selectedBedPosition = 'lower'.obs;
+  final Map<String, double> seatPrices = {
+    'regular': 0.0,
+    'economic_upper': 0.0,
+    'economic_lower': 0.0,
+    'vip_upper': 0.0,
+    'vip_lower': 0.0,
+  };
+
+  // Getter for current seat price
+  double get currentSeatPrice {
+    final seatType = selectedSeatType.value;
+    final bedPosition = selectedBedPosition.value;
+    final key = seatType == 'regular' ? 'regular' : '${seatType}_$bedPosition';
+    return seatPrices[key] ?? 0.0;
+  }
+
+  // Get formatted selected date
+  String get formattedSelectedDate {
+    if (selectedDate.value == null) return '';
+    return DateFormat('EEEE, MMMM d, y').format(selectedDate.value!);
+  }
+
+  // Navigation
+  final RxInt currentPage = 0.obs;
+  final int totalPages = 4; // Total number of pages in the form
+
+  // Form validation state
+  final RxBool isFormValid = false.obs;
 
   // Observable variables
   final Rx<String?> selectedDepartureStation = Rx<String?>(null);
   final Rx<String?> selectedArrivalStation = Rx<String?>(null);
   final Rx<DateTime?> selectedDate = Rx<DateTime?>(null);
-  final RxInt currentPage = 0.obs;
   final RxString departureStation = ''.obs;
   final RxString arrivalStation = ''.obs;
   final Rx<DateTime> date = DateTime.now().obs;
-  final RxString citizenship = 'Ethiopian'.obs;
-  final RxString firstName = ''.obs;
-  final RxString lastName = ''.obs;
-  final RxString email = ''.obs;
-  final RxString phone = ''.obs;
-  final RxString passport = ''.obs;
-  final RxString seatType = 'regular'.obs;
-  final RxString bedPosition = ''.obs;
-  final RxDouble price = 0.0.obs;
   final RxBool isLoading = false.obs;
-
-  // These fields are used in the UI
-  final RxString selectedSeatType = RxString('regular');
-  final RxString selectedBedPosition = RxString('');
-  final RxString selectedCitizenship = RxString('Ethiopian');
-  final RxString selectedForeignCountry = RxString('');
-
-  final List<String> foreignCountries = [
-    'USA',
-    'UK',
-    'Canada',
-    'France',
-    'Germany',
-    'Italy',
-    'Spain',
-    'China',
-    'Japan',
-    'India',
-  ];
-
-  // Prices from Firestore
   final RxList<PriceModel> prices = <PriceModel>[].obs;
-  final RxMap<String, double> seatPrices = RxMap<String, double>();
-  final RxBool pricesLoaded = false.obs;
-
-  // Station list
-  final List<String> stations = [
-    'Sebeta',
-    'Lebu',
-    'Bishoftu',
-    'Mojo',
-    'Adama',
-    'Bike',
-    'Mieso',
-    'Dire Dawa',
-  ];
-  GlobalKey<FormState> formKey = GlobalKey<FormState>();
-
-  // Getters
-  bool get canProceedFromSeatSelection =>
-      selectedSeatType.value == 'regular' ||
-      ((selectedSeatType.value == 'economic' ||
-              selectedSeatType.value == 'vip') &&
-          selectedBedPosition.value.isNotEmpty);
-
-  double get currentSeatPrice {
-    if (selectedSeatType.value == 'regular') {
-      return seatPrices['regular'] ?? 0.0;
-    } else if ((selectedSeatType.value == 'economic' ||
-            selectedSeatType.value == 'vip') &&
-        selectedBedPosition.value.isNotEmpty) {
-      final key = '${selectedSeatType.value}_${selectedBedPosition.value}';
-      return seatPrices[key] ?? 0.0;
-    }
-    return 0.0;
-  }
-
-  // Getter for formatted selected date
-  String get formattedSelectedDate {
-    if (selectedDate.value == null) return '';
-
-    // Format: Day of Week, Month Day, Year (e.g., "Monday, January 1, 2023")
-    return "${_getDayName(selectedDate.value!.weekday)}, ${_getMonthName(selectedDate.value!.month)} ${selectedDate.value!.day}, ${selectedDate.value!.year}";
-  }
-
-  // Helper method to get day name
-  String _getDayName(int weekday) {
-    switch (weekday) {
-      case 1:
-        return 'Monday';
-      case 2:
-        return 'Tuesday';
-      case 3:
-        return 'Wednesday';
-      case 4:
-        return 'Thursday';
-      case 5:
-        return 'Friday';
-      case 6:
-        return 'Saturday';
-      case 7:
-        return 'Sunday';
-      default:
-        return '';
-    }
-  }
-
-  // Helper method to get month name
-  String _getMonthName(int month) {
-    switch (month) {
-      case 1:
-        return 'January';
-      case 2:
-        return 'February';
-      case 3:
-        return 'March';
-      case 4:
-        return 'April';
-      case 5:
-        return 'May';
-      case 6:
-        return 'June';
-      case 7:
-        return 'July';
-      case 8:
-        return 'August';
-      case 9:
-        return 'September';
-      case 10:
-        return 'October';
-      case 11:
-        return 'November';
-      case 12:
-        return 'December';
-      default:
-        return '';
-    }
-  }
+  final RxList<String> availableSeatTypes = <String>['regular', 'sleeper'].obs;
+  final RxList<String> availableBedPositions = <String>['lower', 'upper'].obs;
 
   @override
   void onInit() {
     super.onInit();
-    print('TicketController initialized');
-
-    // Load verified email from storage and set it in the email controller
-    final box = GetStorage();
-    final verifiedEmail = box.read('verifiedEmail');
-    if (verifiedEmail != null) {
-      emailController.text = verifiedEmail;
-      print('Loaded verified email: $verifiedEmail');
-    } else {
-      print('No verified email found in storage');
+    
+    // Initialize controllers
+    departureController = TextEditingController();
+    arrivalController = TextEditingController();
+    dateController = TextEditingController();
+    firstNameController = TextEditingController();
+    lastNameController = TextEditingController();
+    emailController = TextEditingController();
+    phoneController = TextEditingController();
+    passportController = TextEditingController();
+    seatController = TextEditingController();
+    priceController = TextEditingController();
+    statusController = TextEditingController();
+    selectedCitizenshipController = TextEditingController();
+    
+    // Add update listeners to all text controllers
+    void addUpdateListener(TextEditingController controller) {
+      controller.addListener(update);
     }
-
+    
+    // Add listeners to form fields for real-time validation
+    addUpdateListener(firstNameController);
+    addUpdateListener(lastNameController);
+    addUpdateListener(phoneController);
+    addUpdateListener(passportController);
+    addUpdateListener(emailController);
+    
+    // Check if email is already verified
+    final storedEmail = _otpService.getVerifiedEmail();
+    if (storedEmail != null) {
+      verifiedEmail.value = storedEmail;
+      if (emailController.text.isNotEmpty && emailController.text == storedEmail) {
+        isEmailVerified.value = true;
+      }
+    }
+    
+    // Load prices when controller initializes
     loadPricesFromFirestore();
   }
 
-  // Load all prices from Firestore
-  void loadPricesFromFirestore() {
-    isLoading.value = true;
-    _priceRepo.getAllPrices().listen((priceList) {
-      prices.value = priceList;
-      print('Loaded ${priceList.length} prices from Firestore');
-      pricesLoaded.value = true;
+  // Send OTP to the provided email
+  Future<bool> sendOTP() async {
+    try {
+      isSendingOTP.value = true;
+      otpError.value = '';
+      
+      final email = emailController.text.trim();
+      if (email.isEmpty) {
+        otpError.value = 'Please enter your email first';
+        return false;
+      }
+      
+      if (!GetUtils.isEmail(email)) {
+        otpError.value = 'Please enter a valid email';
+        return false;
+      }
+      
+      // If email is already verified, no need to send OTP again
+      if (isEmailVerified.value && verifiedEmail.value == email) {
+        return true;
+      }
+      
+      await _otpService.sendOTP(email);
+      
+      Get.snackbar(
+        'OTP Sent', 
+        'We have sent an OTP to your email',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+      
+      return true;
+    } catch (e) {
+      otpError.value = e.toString().replaceAll('Exception: ', '');
+      return false;
+    } finally {
+      isSendingOTP.value = false;
+    }
+  }
+
+  // Verify the OTP entered by the user
+  Future<bool> verifyOTP() async {
+    try {
+      isVerifyingOTP.value = true;
+      otpError.value = '';
+      
+      final email = emailController.text.trim();
+      final code = otpCode.value.trim();
+      
+      if (email.isEmpty) {
+        otpError.value = 'Email is required';
+        return false;
+      }
+      
+      if (code.isEmpty) {
+        otpError.value = 'Please enter the OTP';
+        return false;
+      }
+      
+      await _otpService.verifyOTP(email, code);
+      
+      // Mark email as verified
+      isEmailVerified.value = true;
+      verifiedEmail.value = email;
+      
+      Get.snackbar(
+        'Email Verified', 
+        'Your email has been verified successfully',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+      
+      return true;
+    } catch (e) {
+      otpError.value = e.toString().replaceAll('Exception: ', '');
+      return false;
+    } finally {
+      isVerifyingOTP.value = false;
+    }
+  }
+
+  // Load prices from Firestore
+  Future<void> loadPricesFromFirestore() async {
+    try {
+      isLoading.value = true;
+      final priceList = await _priceRepo.getAllPrices();
+      prices.assignAll(await priceList.first); // Assuming getAllPrices returns a Future<Stream<List<PriceModel>>>
       updatePricesBasedOnCitizenship();
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to load prices',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
       isLoading.value = false;
-    }, onError: (error) {
-      print('Error loading prices: $error');
-      isLoading.value = false;
-      Get.snackbar('Error', 'Failed to load prices');
-    });
-  }
-
-  // Find price for a specific route
-  PriceModel? findPriceForRoute(String originName, String destinationName) {
-    if (!pricesLoaded.value || prices.isEmpty) {
-      return null;
     }
-
-    return prices.firstWhereOrNull(
-      (price) => price.originName == originName && price.destinationName == destinationName,
-    );
-  }
-
-  // Get price value based on ticket type and citizenship
-  double getPriceForTicketType(PriceModel? priceModel, String ticketType, String citizenship) {
-    if (priceModel == null) {
-      return 0.0;
-    }
-
-    String currencyCode;
-    switch (citizenship) {
-      case 'Ethiopian':
-        currencyCode = 'ETH';
-        break;
-      case 'Djiboutian':
-        currencyCode = 'DJI';
-        break;
-      case 'Foreign':
-        currencyCode = 'FOR';
-        break;
-      default:
-        currencyCode = 'ETH';
-    }
-
-    // Map our ticket types to Firestore's ticket types
-    String firestoreTicketType;
-    switch (ticketType) {
-      case 'regular':
-        firestoreTicketType = 'regular';
-        break;
-      case 'economic_upper':
-        firestoreTicketType = 'bedUpper';
-        break;
-      case 'economic_middle':
-        firestoreTicketType = 'bedMiddle';
-        break;
-      case 'economic_lower':
-        firestoreTicketType = 'bedLower';
-        break;
-      case 'vip_upper':
-        firestoreTicketType = 'vipUpper';
-        break;
-      case 'vip_middle':
-        firestoreTicketType = 'vipMiddle';
-        break;
-      case 'vip_lower':
-        firestoreTicketType = 'vipLower';
-        break;
-      default:
-        firestoreTicketType = 'regular';
-    }
-
-    return priceModel.getPriceByTypeAndCurrency(firestoreTicketType, currencyCode);
   }
 
   // Update prices based on citizenship
   void updatePricesBasedOnCitizenship() {
-    // Clear current prices
-    seatPrices.clear();
-
-    if (!pricesLoaded.value) {
-      print('Cannot update prices - prices not loaded from Firestore yet');
-      return;
+    try {
+      final isForeign = selectedCitizenship.value != 'Ethiopian';
+      
+      // Base prices for Ethiopian citizens
+      final Map<String, double> basePrices = {
+        'regular': 100.0,
+        'economic_upper': 150.0,
+        'economic_middle': 150.0,
+        'economic_lower': 150.0,
+        'vip_upper': 200.0,
+        'vip_lower': 200.0,
+      };
+      
+      // Update seat prices based on citizenship
+      basePrices.forEach((key, basePrice) {
+        if (isForeign) {
+          // Apply foreigner pricing (50% more)
+          seatPrices[key] = basePrice * 1.5;
+        } else {
+          seatPrices[key] = basePrice;
+        }
+      });
+      
+      update(); // Notify listeners
+    } catch (e) {
+      print('Error updating prices: $e');
+      // Reset to default prices in case of error
+      seatPrices.clear();
+      seatPrices.addAll({
+        'regular': 100.0,
+        'economic_upper': 150.0,
+        'economic_middle': 150.0,
+        'economic_lower': 150.0,
+        'vip_upper': 200.0,
+        'vip_lower': 200.0,
+      });
+      update();
     }
-
-    if (selectedDepartureStation.value == null || selectedArrivalStation.value == null) {
-      print('Cannot update prices - departure or arrival station not selected');
-      return;
-    }
-
-    // Find price for the selected route
-    PriceModel? routePrice = findPriceForRoute(
-      selectedDepartureStation.value!,
-      selectedArrivalStation.value!,
-    );
-
-    if (routePrice == null) {
-      print('No price found for route ${selectedDepartureStation.value} to ${selectedArrivalStation.value}');
-      return;
-    }
-
-    print('Found price for route ${routePrice.originName} to ${routePrice.destinationName}');
-
-    // Map of ticket types
-    final ticketTypes = {
-      'regular': 'regular',
-      'economic_upper': 'bedUpper',
-      'economic_middle': 'bedMiddle',
-      'economic_lower': 'bedLower',
-      'vip_upper': 'vipUpper',
-      'vip_middle': 'vipMiddle',
-      'vip_lower': 'vipLower',
-    };
-
-    // Get prices for the current citizenship
-    String currencyCode;
-    switch (selectedCitizenship.value) {
-      case 'Ethiopian':
-        currencyCode = 'ETH';
-        break;
-      case 'Djiboutian':
-        currencyCode = 'DJI';
-        break;
-      case 'Foreign':
-        currencyCode = 'FOR';
-        break;
-      default:
-        currencyCode = 'ETH';
-    }
-
-    // Calculate and set prices from Firestore data
-    ticketTypes.forEach((uiKey, firestoreKey) {
-      double price = routePrice.getPriceByTypeAndCurrency(firestoreKey, currencyCode);
-      seatPrices[uiKey] = price;
-      print('Price for $uiKey ($currencyCode): $price');
-    });
   }
 
+  // Navigation methods
   void nextPage() {
-    try {
-      // First page - Station selection
-      if (currentPage.value == 0) {
-        if (_validateFirstStep()) {
-          print('=== Step 1 Values ===');
-          print('Departure Station: ${selectedDepartureStation.value}');
-          print('Arrival Station: ${selectedArrivalStation.value}');
-          print('Date: ${selectedDate.value}');
-          print('Citizenship: ${selectedCitizenship.value}');
-          
-          // Set values to controllers for other parts of the app
-          departureController.text = selectedDepartureStation.value!;
-          arrivalController.text = selectedArrivalStation.value!;
-
-          // Update prices based on citizenship before moving to the next page
-          updatePricesBasedOnCitizenship();
-
-          // Move to next page
-          currentPage.value++;
-          
-          // Provide feedback
-          Get.snackbar(
-            'Step Completed',
-            'Station and date selection confirmed',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green.shade700,
-            colorText: Colors.white,
-            duration: Duration(seconds: 2),
-          );
-        }
-      } 
-      // Second page - User information
-      else if (currentPage.value == 1) {
-        if (_validateSecondStep()) {
-          print('=== Step 2 Values ===');
-          print('First Name: ${firstNameController.text}');
-          print('Last Name: ${lastNameController.text}');
-          print('Email: ${emailController.text}');
-          print('Phone: ${phoneController.text}');
-          
-          // Move to next page
-          currentPage.value++;
-          
-          // Provide feedback
-          Get.snackbar(
-            'Step Completed',
-            'Personal information saved',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green.shade700,
-            colorText: Colors.white,
-            duration: Duration(seconds: 2),
-          );
-        }
-      } 
-      // Third page - Seat selection
-      else if (currentPage.value == 2) {
-        if (_validateInputs()) {
-          print('=== Step 3 Values ===');
-          print('Seat Type: ${selectedSeatType.value}');
-          print('Bed Position: ${selectedBedPosition.value}');
-          print('Price: ${currentSeatPrice}');
-          
-          // Move to next page
-          currentPage.value++;
-          
-          // Provide feedback
-          Get.snackbar(
-            'Step Completed',
-            'Seat selection confirmed',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green.shade700,
-            colorText: Colors.white,
-            duration: Duration(seconds: 2),
-          );
-        }
-      }
-    } catch (e) {
-      print('Error in nextPage: $e');
-      Get.snackbar(
-        'Error',
-        'An error occurred when trying to proceed. Please try again.',
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red.shade700,
-        colorText: Colors.white,
-        duration: Duration(seconds: 4),
-      );
+    if (currentPage.value < totalPages - 1) {
+      currentPage.value++;
     }
   }
 
   void previousPage() {
     if (currentPage.value > 0) {
       currentPage.value--;
+    } else {
+      // If we're on the first page, navigate back to home
+      Get.offAllNamed('/home');
     }
   }
 
+  // Seat selection methods
   void setSelectedSeatType(String type) {
     selectedSeatType.value = type;
-    if (type == 'regular') {
-      selectedBedPosition.value = '';
-    }
+    // Reset bed position when seat type changes
+    selectedBedPosition.value = 'lower';
   }
 
   void setSelectedBedPosition(String position) {
     selectedBedPosition.value = position;
   }
 
-  bool _validateFirstStep() {
-    bool isValid = true;
-    String errorMsg = '';
-    
-    // Check if departure station is selected
-    if (selectedDepartureStation.value == null) {
-      isValid = false;
-      errorMsg += 'Please select a departure station\n';
-    }
-    
-    // Check if arrival station is selected
-    if (selectedArrivalStation.value == null) {
-      isValid = false;
-      errorMsg += 'Please select an arrival station\n';
-    }
-    
-    // Check if stations are the same
-    if (selectedDepartureStation.value != null && 
-        selectedArrivalStation.value != null && 
-        selectedDepartureStation.value == selectedArrivalStation.value) {
-      isValid = false;
-      errorMsg += 'Departure and arrival stations cannot be the same\n';
-    }
-    
-    // Check if date is selected
-    if (selectedDate.value == null) {
-      isValid = false;
-      errorMsg += 'Please select a travel date';
-    }
-    
-    // Debug print
-    print('First step validation: $isValid');
-    if (!isValid) {
-      print('Validation errors: $errorMsg');
-    }
-    
-    // Show error message if validation fails
-    if (!isValid) {
-      Get.snackbar(
-        'Validation Error',
-        errorMsg.trim(),
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red.shade700,
-        colorText: Colors.white,
-        duration: Duration(seconds: 4),
-        margin: EdgeInsets.all(10),
-      );
-    }
-    
-    return isValid;
-  }
-
-  bool _validateSecondStep() {
-    bool isValid = true;
-    String errorMsg = '';
-    
-    // Validate first name
-    if (firstNameController.text.isEmpty) {
-      isValid = false;
-      errorMsg += 'First name is required\n';
-    }
-    
-    // Validate last name
-    if (lastNameController.text.isEmpty) {
-      isValid = false;
-      errorMsg += 'Last name is required\n';
-    }
-    
-    // Validate email
-    if (emailController.text.isEmpty) {
-      isValid = false;
-      errorMsg += 'Email is required\n';
-    } else if (!GetUtils.isEmail(emailController.text)) {
-      isValid = false;
-      errorMsg += 'Please enter a valid email address\n';
-    }
-    
-    // Validate phone format - more flexible validation
-    if (phoneController.text.isEmpty) {
-      isValid = false;
-      errorMsg += 'Phone number is required\n';
-    } else if (phoneController.text.length < 9) {
-      isValid = false;
-      errorMsg += 'Phone number is too short\n';
-    }
-    
-    // Validate passport if foreign citizen
-    if (selectedCitizenship.value == 'Foreign' && passportController.text.isEmpty) {
-      isValid = false;
-      errorMsg += 'Passport number is required for foreign citizens';
-    }
-
-    // Show error message if validation fails
-    if (!isValid) {
-      Get.snackbar(
-        'Validation Error',
-        errorMsg.trim(),
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red.shade700,
-        colorText: Colors.white,
-        duration: Duration(seconds: 4),
-        margin: EdgeInsets.all(10),
-      );
-    }
-    
-    return isValid;
-  }
-  
-  bool _validateInputs() {
-    bool isValid = true;
-    String errorMsg = '';
-    
-    // Validate seat type selection
-    if (selectedSeatType.value.isEmpty) {
-      isValid = false;
-      errorMsg += 'Please select a seat type\n';
-    }
-
-    // If economic or VIP is selected, validate bed position
-    if ((selectedSeatType.value == 'economic' || selectedSeatType.value == 'vip') &&
-        selectedBedPosition.value.isEmpty) {
-      isValid = false;
-      errorMsg += 'Please select a bed position';
-    }
-
-    // Show error message if validation fails
-    if (!isValid) {
-      Get.snackbar(
-        'Validation Error',
-        errorMsg.trim(),
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red.shade700,
-        colorText: Colors.white,
-        duration: Duration(seconds: 4),
-        margin: EdgeInsets.all(10),
-      );
-    }
-
-    return isValid;
-  }
-  
-  void _resetForm() {
-    selectedDepartureStation.value = null;
-    selectedArrivalStation.value = null;
-    selectedDate.value = null;
-    selectedCitizenship.value = 'Ethiopian';
-    firstNameController.clear();
-    lastNameController.clear();
-    emailController.clear();
-    phoneController.clear();
-    passportController.clear();
-    selectedSeatType.value = 'regular';
-    selectedBedPosition.value = '';
-    currentPage.value = 0;
-  }
-
+  // Book ticket
   Future<void> bookTicket() async {
     try {
-      // Validate all inputs
-      if (!_validateInputs()) {
-        return;
-      }
-
-      isLoading.value = true;
-      print('Creating ticket...');
-
-      // Create the ticket and automatically confirm it
-      final ticket = await _createTicket();
-
-      if (ticket == null) {
-        print('Failed to create ticket');
-        isLoading.value = false;
-
+      if (!formKey.currentState!.validate()) return;
+      
+      // Check if email is verified if it's provided
+      if (emailController.text.isNotEmpty && !isEmailVerified.value) {
         Get.snackbar(
-          'Error',
-          'Failed to create ticket. Please try again.',
+          'Email Not Verified',
+          'Please verify your email before booking',
           snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
+          backgroundColor: Colors.orange,
           colorText: Colors.white,
         );
         return;
       }
-
-      print('Ticket created successfully: ${ticket.id}');
       
-      // IMPORTANT: Move ticket generation BEFORE showing success message or resetting form
-      print('Starting ticket display and email process...');
+      isLoading.value = true;
       
-      // Use Future.delayed to ensure UI has time to respond before continuing
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Generate a random 10-character alphanumeric ticket number
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       
-      // Generate ticket and display it
-      await _generateAndShowTicket(ticket);
+      // Get departure and arrival values from controllers if not set in Rx variables
+      final departureValue = selectedDepartureStation.value ?? departureController.text.trim();
+      final arrivalValue = selectedArrivalStation.value ?? arrivalController.text.trim();
       
-      print('Ticket display and email process completed');
+      if (departureValue.isEmpty || arrivalValue.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Please select departure and arrival stations',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        isLoading.value = false;
+        return;
+      }
       
-      isLoading.value = false;
+      // Generate a ticket number
+      final ticketNumber = _generateTicketNumber();
       
-      // Show success message
-      Get.snackbar(
-        'Success',
-        'Your ticket has been booked successfully!',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 3),
+      // Format seat type and bed position for display
+      String formattedSeatType = selectedSeatType.value;
+      String formattedBedPosition = selectedBedPosition.value ?? '';
+      
+      // Update seat type display
+      if (selectedSeatType.value == 'vip') {
+        formattedSeatType = 'VIP Bed';
+      } else if (selectedSeatType.value == 'economic') {
+        formattedSeatType = 'Economic Bed';
+      } else if (selectedSeatType.value == 'regular') {
+        formattedSeatType = 'Regular Seat';
+        // Clear bed position for regular seats
+        formattedBedPosition = '';
+      }
+      
+      // Create a new ticket with form data
+      final ticket = TicketModel(
+        id: const Uuid().v4(),
+        departure: departureValue,
+        arrival: arrivalValue,
+        date: selectedDate.value ?? DateTime.now(),
+        firstName: firstNameController.text.trim(),
+        lastName: lastNameController.text.trim(),
+        email: emailController.text.trim(),
+        phone: phoneController.text.trim(),
+        passport: passportController.text.trim(),
+        seatType: formattedSeatType,
+        bedPosition: formattedBedPosition,
+        price: currentSeatPrice,
+        status: 'confirmed',
+        citizenship: selectedCitizenship.value,
+        ticket_number: ticketNumber, // Set the generated ticket number
       );
       
-      // Delay before resetting the form
-      await Future.delayed(const Duration(seconds: 1));
+      // Debug print to verify the ticket data
+      print('Creating ticket with number: $ticketNumber');
+      print('Ticket data: ${ticket.toJson()}');
       
-      // Reset the form
-      _resetForm();
+      // Save ticket to Firestore
+      final ticketId = await _ticketRepo.createTicket(ticket);
+      
+      if (ticketId.isEmpty) {
+        throw Exception('Failed to create ticket');
+      }
+      
+      // Create an updated ticket with the generated ID and ensure all fields are set
+      final updatedTicket = ticket.copyWith(
+        id: ticketId,
+        ticket_number: ticketNumber, // Ensure ticket number is preserved
+        departure: selectedDepartureStation.value ?? '',
+        arrival: selectedArrivalStation.value ?? '',
+      );
+      
+      // Debug print to verify the values
+      print('Updated ticket with ID: $ticketId, number: $ticketNumber');
+      print('Departure: ${updatedTicket.departure}, Arrival: ${updatedTicket.arrival}');
+      
+      // Send confirmation email using the instance
+      print('Sending confirmation email to: ${updatedTicket.email}');
+      final emailSent = await _emailService.sendTicketEmail(updatedTicket);
+      print('Email sent: $emailSent');
+      
+      // Navigate to ticket view and remove all previous routes to prevent going back to the booking flow
+      final ticketView = TicketViewScreen(
+        ticket: updatedTicket,
+        isNewBooking: true,
+      );
+      
+      if (emailSent) {
+        // Navigate to success screen
+        Get.offAll(() => ticketView);
+      } else {
+        // If email fails but ticket is saved, still navigate but show a warning
+        Get.snackbar(
+          'Ticket Booked', 
+          'Your ticket was booked but we couldn\'t send the confirmation email. Please check your email address.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+        );
+        Get.offAll(() => ticketView);
+      }
       
     } catch (e) {
-      print('BOOKING ERROR: $e');
-      isLoading.value = false;
-
-      // Show error message
       Get.snackbar(
         'Error',
         'Failed to book ticket: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        snackPosition: SnackPosition.TOP,
       );
+    } finally {
+      isLoading.value = false;
     }
   }
 
   // Generate a random 10-character alphanumeric ticket number
   String _generateTicketNumber() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final rnd = new Random();
+    final random = Random();
     return String.fromCharCodes(
-      Iterable.generate(
-        10, // Exactly 10 characters
-        (_) => chars.codeUnitAt(rnd.nextInt(chars.length)),
-      ),
+      Iterable.generate(10, (_) => chars.codeUnitAt(random.nextInt(chars.length)))
     );
   }
 
-  // Generate a random 8-character verification code
-  String _generateVerificationCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking characters
-    final rnd = new Random();
-    return String.fromCharCodes(
-      Iterable.generate(
-        8, // 8 characters
-        (_) => chars.codeUnitAt(rnd.nextInt(chars.length)),
-      ),
-    );
-  }
-  
-  // Generate a secure access token
-  String _generateAccessToken() {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final rnd = new Random.secure();
-    return String.fromCharCodes(
-      Iterable.generate(
-        32, // 32 characters for security
-        (_) => chars.codeUnitAt(rnd.nextInt(chars.length)),
-      ),
-    );
-  }
-
-  Future<TicketModel?> _createTicket() async {
-    try {
-      // Generate a unique 10-character ticket number
-      final String ticketNumber = _generateTicketNumber();
-      
-      // Generate a verification code for the ticket
-      final String verificationCode = _generateVerificationCode();
-      
-      // Generate an access token
-      final String accessToken = _generateAccessToken();
-      
-      // Calculate expiration date (90 days from now)
-      final int expiresAt = DateTime.now().add(const Duration(days: 90)).millisecondsSinceEpoch;
-      
-      // Create ticket model with all necessary fields
-      final TicketModel ticket = TicketModel(
-        departure: selectedDepartureStation.value!,
-        arrival: selectedArrivalStation.value!,
-        date: selectedDate.value!,
-        firstName: firstNameController.text.trim(),
-        lastName: lastNameController.text.trim(),
-        email: emailController.text.trim(),
-        phone: phoneController.text.trim(),
-        passport: passportController.text.trim(),
-        seatType: selectedSeatType.value,
-        bedPosition: selectedBedPosition.value,
-        price: currentSeatPrice,
-        status: 'confirmed', // Mark as confirmed immediately
-        citizenship: selectedCitizenship.value,
-        ticket_number: ticketNumber,
-        accessToken: accessToken,
-        // Removed ticketCode as it's not needed
-        expiresAt: expiresAt,
-        createdAt: DateTime.now(),
-      );
-
-      // Save to Firestore - this returns a document ID string
-      final String ticketId = await _ticketRepo.createTicket(ticket);
-      
-      // Create a TicketModel with the ID included
-      final updatedTicket = ticket.copyWith(id: ticketId);
-      
-      print('Ticket created and confirmed with ID: $ticketId, Ticket Number: $ticketNumber');
-
-      return updatedTicket;
-    } catch (e) {
-      print('Failed to create ticket: $e');
-      return null;
-    }
-  }
-  
-  // Payment and confirmation methods removed since tickets are confirmed on creation
-
-  // Generate ticket and show it to the user
-  Future<void> _generateAndShowTicket(TicketModel ticket) async {
-    try {
-      print('STEP 1: Starting ticket display');
-      
-      // Show the ticket in the ticket view screen with a flag to indicate this is the initial view after booking
-      // The isNewBooking flag will control whether to show the email button in the ticket view
-      await Get.to(() => TicketViewScreen(ticket: ticket, isNewBooking: true));
-      
-      print('STEP 2: Ticket displayed successfully');
-      
-      // Email sending is now handled in the TicketViewScreen when user presses the Send Email button
-      // This prevents duplicate emails and gives the user more control
-      print('STEP 3: Email will be sent from ticket view screen if user requests it');
-    } catch (e) {
-      print('ERROR in _generateAndShowTicket: $e');
-      Get.snackbar(
-        'Error',
-        'Failed to display ticket: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    }
-  }
-  
-  // Fetch a ticket by ID - uses TicketRepository from class property
-  Future<TicketModel?> getTicketById(String ticketId) async {
-    try {
-      return await _ticketRepo.getTicket(ticketId);
-    } catch (e) {
-      print('Error fetching ticket: $e');
-      return null;
-    }
-  }
-  
-  // Get all tickets for the current user
-  Future<List<TicketModel>> getUserTickets(String email) async {
-    try {
-      // Get the stream and wait for the first value
-      final ticketsStream = _ticketRepo.getTicketsByEmail(email);
-      final tickets = await ticketsStream.first;
-      return tickets;
-    } catch (e) {
-      print('Error fetching user tickets: $e');
-      return [];
-    }
-  }
-
+  // Clean up resources
   @override
   void onClose() {
-    // Dispose of all the controllers
-    departureController.dispose();
-    arrivalController.dispose();
-    dateController.dispose();
-    firstNameController.dispose();
-    lastNameController.dispose();
-    emailController.dispose();
-    phoneController.dispose();
-    passportController.dispose();
-    seatController.dispose();
-    priceController.dispose();
-    statusController.dispose();
-    selectedCitizenshipController.dispose();
+    // Remove listeners and dispose controllers
+    void removeListener(TextEditingController controller) {
+      controller.removeListener(update);
+      controller.dispose();
+    }
+    
+    // Remove listeners and dispose all controllers
+    removeListener(departureController);
+    removeListener(arrivalController);
+    removeListener(dateController);
+    removeListener(firstNameController);
+    removeListener(lastNameController);
+    removeListener(emailController);
+    removeListener(phoneController);
+    removeListener(passportController);
+    removeListener(seatController);
+    removeListener(priceController);
+    removeListener(statusController);
+    removeListener(selectedCitizenshipController);
+    
     super.onClose();
   }
 }

@@ -26,8 +26,8 @@ class TicketViewScreen extends StatefulWidget {
 }
 
 class _TicketViewScreenState extends State<TicketViewScreen> {
-  // Track if button is disabled
-  bool _emailButtonDisabled = false;
+  // Flag to track if we've shown the success message
+  bool _hasShownSuccess = false;
   
   // Getter for ticket to match previous code
   TicketModel get ticket => widget.ticket;
@@ -37,6 +37,13 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            // Navigate to home screen instead of just popping
+            Get.offAllNamed('/home');
+          },
+        ),
         title: Text('E-Ticket', 
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
@@ -105,26 +112,59 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
                   
                   const SizedBox(height: 24),
                   
-                  // Actions row with email and download buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // Only show email button for new bookings
-                      if (widget.isNewBooking)
-                        _buildActionButton(
-                          context,
-                          icon: Icons.email_outlined,
-                          label: _emailButtonDisabled ? 'Sending...' : 'Send Email',
-                          onTap: _emailButtonDisabled ? null : () => _sendEmailWithTicketId(),
-                          isDisabled: _emailButtonDisabled,
-                        ),
-                      _buildActionButton(
-                        context,
-                        icon: Icons.download_outlined,
-                        label: 'Download',
-                        onTap: () => _downloadTicket(),
+                  // Action button for email (only shown for new bookings)
+                  if (widget.isNewBooking)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _isSendingEmail,
+                        builder: (context, isSending, child) {
+                          return _buildActionButton(
+                            context,
+                            icon: Icons.email_outlined,
+                            label: isSending ? 'Sending...' : 'Send Email',
+                            onTap: isSending ? null : _sendEmailWithTicketId,
+                            isDisabled: isSending,
+                          );
+                        },
                       ),
-                    ],
+                    ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Screenshot instructions
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[800]!.withOpacity(0.5)
+                          : Colors.blue[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.blue[800]!
+                            : Colors.blue[100]!,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.screenshot_monitor_outlined,
+                          color: Theme.of(context).primaryColor,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Take a screenshot of this ticket for your records',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).textTheme.bodyMedium?.color,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   
                   const SizedBox(height: 24),
@@ -247,6 +287,8 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
                 ),
                 _buildDetailRow(context, 'Phone', ticket.phone),
                 _buildDetailRow(context, 'Email', ticket.email),
+                if (ticket.citizenship?.toLowerCase() != 'ethiopian')
+                  _buildDetailRow(context, 'Passport', ticket.passport ?? 'N/A'),
                 
                 const SizedBox(height: 16),
                 
@@ -263,11 +305,12 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
                   'Seat Type', 
                   ticket.seatType,
                 ),
-                _buildDetailRow(
-                  context, 
-                  'Bed Position', 
-                  ticket.bedPosition,
-                ),
+                if (ticket.seatType != 'Regular Seat')
+                  _buildDetailRow(
+                    context, 
+                    'Bed Position', 
+                    ticket.bedPosition,
+                  ),
                 _buildDetailRow(
                   context, 
                   'Status', 
@@ -390,11 +433,11 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
   }
   
   // A completely simplified version of sending ticket by email
-  void _sendEmailWithTicketId() {
-    // Set button as disabled temporarily
-    setState(() {
-      _emailButtonDisabled = true;
-    });
+  final ValueNotifier<bool> _isSendingEmail = ValueNotifier<bool>(false);
+  
+  Future<void> _sendEmailWithTicketId() async {
+    // Set button as disabled
+    _isSendingEmail.value = true;
     
     // Show a simple snackbar that we're sending
     Get.snackbar(
@@ -406,8 +449,10 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
       duration: const Duration(seconds: 1),
     );
     
-    // Fire-and-forget approach to send the email
-    TicketEmailService.sendTicketEmail(ticket).then((success) {
+    try {
+      final emailService = TicketEmailService();
+      final success = await emailService.sendTicketEmail(ticket);
+      
       // Show appropriate message based on success
       if (success) {
         Get.snackbar(
@@ -426,113 +471,28 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
           colorText: Colors.white,
         );
       }
-    }).catchError((error) {
+    } catch (error) {
       // Handle any errors
       Get.snackbar(
         'Error',
-        'Failed to send email: $error',
+        'Failed to send email: ${error.toString()}',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
-    }).whenComplete(() {
+    } finally {
       // Always re-enable the button
       if (mounted) {
-        setState(() {
-          _emailButtonDisabled = false;
-        });
+        _isSendingEmail.value = false;
       }
-    });
+    }
   }
   
-  // Download QR code as an image
-  void _downloadTicket() async {
-    try {
-      // Show loading indicator
-      Get.dialog(
-        Center(child: CircularProgressIndicator()),
-        barrierDismissible: false,
-      );
-      
-      // Generate QR code data
-      final qrData = ticket.ticket_number ?? ticket.id ?? 'Unknown ticket';
-      
-      // Create a QR image
-      final qrPainter = QrPainter(
-        data: qrData,
-        version: QrVersions.auto,
-        color: Colors.black,
-        emptyColor: Colors.white,
-        gapless: true,
-        errorCorrectionLevel: QrErrorCorrectLevel.H,
-      );
-      
-      // Convert to image - size 200x200 pixels
-      final size = 200.0;
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      
-      // Fill with white background
-      canvas.drawRect(
-        Rect.fromLTWH(0, 0, size, size),
-        Paint()..color = Colors.white,
-      );
-      
-      // Draw QR code
-      qrPainter.paint(canvas, Size(size, size));
-      
-      // Convert to image
-      final picture = recorder.endRecording();
-      final image = await picture.toImage(size.toInt(), size.toInt());
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      
-      if (byteData == null) {
-        throw Exception('Failed to generate QR image');
-      }
-      
-      final bytes = byteData.buffer.asUint8List();
-      
-      // Save the image using ImageGallerySaver
-      final result = await ImageGallerySaver.saveImage(
-        bytes,
-        quality: 100,
-        name: 'Ethiopian_Railway_Ticket_${ticket.ticket_number}_${DateTime.now().millisecondsSinceEpoch}',
-      );
-      
-      // Close loading dialog
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-      
-      // Check if saved successfully
-      if (result['isSuccess']) {
-        Get.snackbar(
-          'Success',
-          'QR code saved to your gallery',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          duration: Duration(seconds: 3),
-        );
-      } else {
-        throw Exception('Failed to save image to gallery');
-      }
-    } catch (e) {
-      // Close loading dialog
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-      
-      // Show error message
-      Get.snackbar(
-        'Error',
-        'Could not download QR code: ${e.toString()}',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: Duration(seconds: 5),
-      );
-    }
+  Future<void> _downloadTicket() async {
+    // This method is kept for backward compatibility but is no longer used
+    // The download functionality has been replaced with screenshot instructions
+    debugPrint('Download functionality has been replaced with screenshot instructions');
+    // No need to show an error since we're intentionally disabling this feature
   }
   
   // Show dialog with copyable ticket number if email fails
@@ -613,7 +573,7 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
               context,
               icon: Icons.confirmation_number,
               text: 'Use your ticket number "${ticket.ticket_number}" in the "My Ticket" tab to access your ticket at any time',
-              isHighlighted: true,
+              isHighlighted: false, // Changed from true to false to remove the red highlight
             ),
             // ID requirement based on nationality
             _buildInstructionItem(
@@ -637,7 +597,7 @@ class _TicketViewScreenState extends State<TicketViewScreen> {
   String _getIdRequirementText() {
     // For real implementation, this would use the passenger nationality data from the ticket
     // For demonstration, we're showing all three options as a single message
-    return 'IMPORTANT: Ethiopian citizens must bring digital ID. Foreign visitors and Djibouti citizens must bring passport.';
+    return 'IMPORTANT: Ethiopian citizens must bring digital ID. Foreign visitors and Djibouti citizens must bring passport.'.replaceAll('_', ' ');
   }
 
   Widget _buildInstructionItem(BuildContext context, {
