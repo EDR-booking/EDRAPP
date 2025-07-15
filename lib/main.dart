@@ -38,7 +38,7 @@ Future<void> main() async {
     anonKey: supabaseAnonKey,
   );
 
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {

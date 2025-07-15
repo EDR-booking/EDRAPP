@@ -249,10 +249,12 @@ class _TicketScreenState extends State<TicketScreen> {
                   ),
                 ),
                 // Content
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 20), // Add top padding to push content to the center
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -316,6 +318,7 @@ class _TicketScreenState extends State<TicketScreen> {
                     ],
                   ),
                 ),
+                ),
               ],
             ),
           ),
@@ -325,14 +328,8 @@ class _TicketScreenState extends State<TicketScreen> {
               child: Container(
                 decoration: BoxDecoration(
                   color: isDark ? Colors.grey.shade900 : Colors.white,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 15,
-                      offset: const Offset(0, -5),
-                    ),
-                  ],
+                  // Use zero border radius to eliminate the gap with header
+                  borderRadius: BorderRadius.zero,
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -3115,12 +3112,13 @@ class _TicketScreenState extends State<TicketScreen> {
 
   Widget _buildProgressBar(int currentStep) {
     final int totalSteps = 4;
-    final List<String> stepTitles = ['Travel Details'.tr, 'Personal Info'.tr, 'Seat Selection'.tr, 'Confirmation'.tr];
+    // Simplified step titles to reduce text clutter
+    final List<String> stepTitles = ['Travel'.tr, 'Info'.tr, 'Seat'.tr, 'Confirm'.tr];
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final controller = Get.find<TicketController>();
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: isDark ? Colors.grey.shade900.withOpacity(0.5) : Colors.white,
         boxShadow: [
@@ -3135,48 +3133,40 @@ class _TicketScreenState extends State<TicketScreen> {
         children: [
           // Progress bar with animation
           Container(
-            height: 8,
+            height: 6, // Reduced height for cleaner look
             width: double.infinity,
             decoration: BoxDecoration(
               color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Stack(
               children: [
                 // Background track
                 Container(
                   width: double.infinity,
-                  height: 8,
+                  height: 6,
                   decoration: BoxDecoration(
                     color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 
-                // Progress indicator with gradient and animation
+                // Progress indicator with solid color (removed gradient to fix yellow/black stripe issue)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 500),
                   curve: Curves.easeInOut,
                   width: (MediaQuery.of(context).size.width - 32) * 
                       ((currentStep + 1) / totalSteps),
-                  height: 8,
+                  height: 6,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Theme.of(context).primaryColor.withOpacity(0.9),
-                        Theme.of(context).primaryColor,
-                        Theme.of(context).primaryColor.withOpacity(0.9),
-                      ],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: BorderRadius.circular(8),
+                    // Simplified shadow to avoid rendering issues
                     boxShadow: [
                       BoxShadow(
-                        color: Theme.of(context).primaryColor.withOpacity(0.3),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                        offset: const Offset(0, 2),
+                        color: Theme.of(context).primaryColor.withOpacity(0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
                       ),
                     ],
                   ),
@@ -3186,7 +3176,7 @@ class _TicketScreenState extends State<TicketScreen> {
           ),
           
           // Step indicators and titles
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: List.generate(
@@ -3202,24 +3192,26 @@ class _TicketScreenState extends State<TicketScreen> {
                   children: [
                     // Step indicator
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 28, // Slightly smaller
+                      height: 28, // Slightly smaller
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: index <= currentStep
                             ? Theme.of(context).primaryColor
                             : isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                        // Simplified border
                         border: Border.all(
-                          color: isDark ? Colors.grey.shade600 : Colors.white,
-                          width: 2,
+                          color: isDark ? Colors.grey.shade700 : Colors.white,
+                          width: 1.5,
                         ),
+                        // Simplified shadow
                         boxShadow: [
                           if (index <= currentStep)
                             BoxShadow(
-                              color: Theme.of(context).primaryColor.withOpacity(0.3),
-                              blurRadius: 8,
-                              spreadRadius: 1,
-                              offset: const Offset(0, 2),
+                              color: Theme.of(context).primaryColor.withOpacity(0.2),
+                              blurRadius: 4,
+                              spreadRadius: 0,
+                              offset: const Offset(0, 1),
                             ),
                         ],
                       ),
@@ -3227,7 +3219,7 @@ class _TicketScreenState extends State<TicketScreen> {
                         child: index < currentStep
                             ? Icon(
                                 Icons.check,
-                                size: 16,
+                                size: 14, // Smaller icon
                                 color: Colors.white,
                               )
                             : Text(
@@ -3237,33 +3229,24 @@ class _TicketScreenState extends State<TicketScreen> {
                                       ? Colors.white
                                       : isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                                   fontWeight: FontWeight.bold,
+                                  fontSize: 12, // Smaller text
                                 ),
                               ),
                       ),
                     ),
                     // Step title
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6), // Reduced spacing
                     Text(
                       stepTitles[index],
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11, // Smaller font
                         fontWeight: index == currentStep ? FontWeight.bold : FontWeight.normal,
                         color: index <= currentStep
                             ? (isDark ? Colors.white : Theme.of(context).primaryColor)
                             : (isDark ? Colors.grey.shade500 : Colors.grey.shade500),
                       ),
                     ),
-                    // Connection line (except for last step)
-                    if (index < totalSteps - 1)
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        height: 2,
-                        width: 20,
-                        color: index < currentStep 
-                            ? Theme.of(context).primaryColor.withOpacity(0.5)
-                            : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
-                      ),
                   ],
                 ),
               ),

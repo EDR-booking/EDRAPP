@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_application_2/features/ticket/models/ticket_model.dart';
 import 'package:flutter_application_2/features/ticket/screen/ticket_view_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_application_2/features/common/widgets/bottom_nav_screen_header.dart';
 import 'package:get/get.dart';
 
 class MyTicketScreen extends StatefulWidget {
@@ -85,9 +86,8 @@ class _MyTicketScreenState extends State<MyTicketScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Find My Ticket'),
-        centerTitle: true,
+      appBar: BottomNavScreenHeader(
+        title: 'Find My Ticket',
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),

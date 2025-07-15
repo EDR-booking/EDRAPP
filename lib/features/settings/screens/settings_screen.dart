@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_application_2/utils/localization/app_translations.dart';
-import 'package:flutter_application_2/utils/widgets/custom_app_bar.dart';
+import 'package:flutter_application_2/features/common/widgets/bottom_nav_screen_header.dart';
 import 'package:iconsax/iconsax.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -10,7 +10,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppBar(
+      appBar: BottomNavScreenHeader(
         title: 'settings',
       ),
       body: SingleChildScrollView(

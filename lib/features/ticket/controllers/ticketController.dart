@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'dart:math';
 import 'dart:convert';
+import 'package:flutter_application_2/features/payment/screens/chapa_payment_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -342,112 +343,29 @@ class TicketController extends GetxController {
       
       isLoading.value = true;
       
-      // Generate a random 10-character alphanumeric ticket number
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      
-      // Get departure and arrival values from controllers if not set in Rx variables
-      final departureValue = selectedDepartureStation.value ?? departureController.text.trim();
-      final arrivalValue = selectedArrivalStation.value ?? arrivalController.text.trim();
-      
-      if (departureValue.isEmpty || arrivalValue.isEmpty) {
+      // Prepare the ticket for payment
+      try {
+        final ticket = await prepareTicketForPayment();
+        
+        // Navigate to Chapa payment screen
+        Get.to(
+          () => ChapaPaymentScreen(
+            ticket: ticket,
+            onPaymentCancelled: () {
+              // Return to the final booking stage when payment is cancelled
+              Get.back();
+            },
+          ),
+        );
+      } catch (e) {
         Get.snackbar(
           'Error',
-          'Please select departure and arrival stations',
+          'Failed to prepare ticket: ${e.toString()}',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.red,
           colorText: Colors.white,
         );
-        isLoading.value = false;
-        return;
       }
-      
-      // Generate a ticket number
-      final ticketNumber = _generateTicketNumber();
-      
-      // Format seat type and bed position for display
-      String formattedSeatType = selectedSeatType.value;
-      String formattedBedPosition = selectedBedPosition.value ?? '';
-      
-      // Update seat type display
-      if (selectedSeatType.value == 'vip') {
-        formattedSeatType = 'VIP Bed';
-      } else if (selectedSeatType.value == 'economic') {
-        formattedSeatType = 'Economic Bed';
-      } else if (selectedSeatType.value == 'regular') {
-        formattedSeatType = 'Regular Seat';
-        // Clear bed position for regular seats
-        formattedBedPosition = '';
-      }
-      
-      // Create a new ticket with form data
-      final ticket = TicketModel(
-        id: const Uuid().v4(),
-        departure: departureValue,
-        arrival: arrivalValue,
-        date: selectedDate.value ?? DateTime.now(),
-        firstName: firstNameController.text.trim(),
-        lastName: lastNameController.text.trim(),
-        email: emailController.text.trim(),
-        phone: phoneController.text.trim(),
-        passport: passportController.text.trim(),
-        seatType: formattedSeatType,
-        bedPosition: formattedBedPosition,
-        price: currentSeatPrice,
-        status: 'confirmed',
-        citizenship: selectedCitizenship.value,
-        ticket_number: ticketNumber, // Set the generated ticket number
-      );
-      
-      // Debug print to verify the ticket data
-      print('Creating ticket with number: $ticketNumber');
-      print('Ticket data: ${ticket.toJson()}');
-      
-      // Save ticket to Firestore
-      final ticketId = await _ticketRepo.createTicket(ticket);
-      
-      if (ticketId.isEmpty) {
-        throw Exception('Failed to create ticket');
-      }
-      
-      // Create an updated ticket with the generated ID and ensure all fields are set
-      final updatedTicket = ticket.copyWith(
-        id: ticketId,
-        ticket_number: ticketNumber, // Ensure ticket number is preserved
-        departure: selectedDepartureStation.value ?? '',
-        arrival: selectedArrivalStation.value ?? '',
-      );
-      
-      // Debug print to verify the values
-      print('Updated ticket with ID: $ticketId, number: $ticketNumber');
-      print('Departure: ${updatedTicket.departure}, Arrival: ${updatedTicket.arrival}');
-      
-      // Send confirmation email using the instance
-      print('Sending confirmation email to: ${updatedTicket.email}');
-      final emailSent = await _emailService.sendTicketEmail(updatedTicket);
-      print('Email sent: $emailSent');
-      
-      // Navigate to ticket view and remove all previous routes to prevent going back to the booking flow
-      final ticketView = TicketViewScreen(
-        ticket: updatedTicket,
-        isNewBooking: true,
-      );
-      
-      if (emailSent) {
-        // Navigate to success screen
-        Get.offAll(() => ticketView);
-      } else {
-        // If email fails but ticket is saved, still navigate but show a warning
-        Get.snackbar(
-          'Ticket Booked', 
-          'Your ticket was booked but we couldn\'t send the confirmation email. Please check your email address.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 5),
-        );
-        Get.offAll(() => ticketView);
-      }
-      
     } catch (e) {
       Get.snackbar(
         'Error',
@@ -468,6 +386,90 @@ class TicketController extends GetxController {
     return String.fromCharCodes(
       Iterable.generate(10, (_) => chars.codeUnitAt(random.nextInt(chars.length)))
     );
+  }
+  
+  // Create a new ticket with payment details and return to Chapa payment screen
+  Future<TicketModel> prepareTicketForPayment() async {
+    if (!formKey.currentState!.validate()) {
+      throw Exception('Invalid form data');
+    }
+    
+    // Get departure and arrival values from controllers if not set in Rx variables
+    final departureValue = selectedDepartureStation.value ?? departureController.text.trim();
+    final arrivalValue = selectedArrivalStation.value ?? arrivalController.text.trim();
+    
+    if (departureValue.isEmpty || arrivalValue.isEmpty) {
+      throw Exception('Please select departure and arrival stations');
+    }
+    
+    // Generate a ticket number
+    final ticketNumber = _generateTicketNumber();
+    
+    // Format seat type and bed position for display
+    String formattedSeatType = selectedSeatType.value;
+    String formattedBedPosition = selectedBedPosition.value ?? '';
+    
+    // Update seat type display
+    if (selectedSeatType.value == 'vip') {
+      formattedSeatType = 'VIP Bed';
+    } else if (selectedSeatType.value == 'economic') {
+      formattedSeatType = 'Economic Bed';
+    } else if (selectedSeatType.value == 'regular') {
+      formattedSeatType = 'Regular Seat';
+      // Clear bed position for regular seats
+      formattedBedPosition = '';
+    }
+    
+    // Create a new ticket with form data but mark as pending
+    final ticket = TicketModel(
+      id: const Uuid().v4(),
+      departure: departureValue,
+      arrival: arrivalValue,
+      date: selectedDate.value ?? DateTime.now(),
+      firstName: firstNameController.text.trim(),
+      lastName: lastNameController.text.trim(),
+      email: emailController.text.trim(),
+      phone: phoneController.text.trim(),
+      passport: passportController.text.trim(),
+      seatType: formattedSeatType,
+      bedPosition: formattedBedPosition,
+      price: currentSeatPrice,
+      status: 'pending', // Set to pending until payment is completed
+      citizenship: selectedCitizenship.value,
+      ticket_number: ticketNumber,
+      paymentStatus: 'pending',
+    );
+    
+    return ticket;
+  }
+  
+  // Save ticket after successful payment
+  Future<String> saveTicketAfterPayment(TicketModel ticket) async {
+    try {
+      // Save ticket to Firestore
+      final ticketId = await _ticketRepo.createTicket(ticket);
+      
+      if (ticketId.isEmpty) {
+        throw Exception('Failed to create ticket');
+      }
+      
+      return ticketId;
+    } catch (e) {
+      print('Error saving ticket after payment: $e');
+      rethrow;
+    }
+  }
+  
+  // Send ticket confirmation email
+  Future<bool> sendTicketEmail(TicketModel ticket) async {
+    try {
+      // Send confirmation email
+      final emailSent = await _emailService.sendTicketEmail(ticket);
+      return emailSent;
+    } catch (e) {
+      print('Error sending ticket email: $e');
+      return false;
+    }
   }
 
   // Clean up resources

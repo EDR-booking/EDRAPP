@@ -3,23 +3,163 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../controllers/service_recommendation_controller.dart';
 import '../../ticket/models/service_model.dart';
-import 'package:flutter_application_2/utils/widgets/custom_app_bar.dart';
+import 'package:flutter_application_2/features/common/widgets/bottom_nav_screen_header.dart';
+
+// Helper class to manage station information with normalized names
+class StationInfo {
+  final String originalName;
+  final String normalizedName;
+  final List<ServiceModel> services;
+  
+  StationInfo({
+    required this.originalName,
+    required this.normalizedName,
+    required this.services,
+  });
+  
+  int get serviceCount => services.length;
+}
 
 class ServiceRecommendationScreen extends StatelessWidget {
   const ServiceRecommendationScreen({super.key});
+  
+  // Normalize station name by converting to title case and removing station suffix
+  String _normalizeStationName(String name) {
+    // Remove suffix like '-station' or ' station'
+    String cleanName = name.replaceAll(RegExp(r'[-\s]station$', caseSensitive: false), '');
+    
+    // Convert to title case (capitalize first letter of each word)
+    List<String> words = cleanName.split(RegExp(r'[-\s]'));
+    words = words.map((word) => word.isNotEmpty 
+        ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' 
+        : '').toList();
+    
+    return words.join(' ');
+  }
+  
+  static Widget buildCategoryFilter(ServiceRecommendationController controller, BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Category title
+        Padding(
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Categories',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isDark ? Colors.white70 : Colors.grey[800],
+                ),
+              ),
+              // Indicator to show scrollable
+              Row(
+                children: [
+                  Icon(Icons.swipe, size: 14, color: isDark ? Colors.white54 : Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Scroll for more',
+                    style: TextStyle(
+                      fontSize: 12, 
+                      color: isDark ? Colors.white54 : Colors.grey[600]
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // Scrollable category chips
+        SizedBox(
+          height: 50,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: controller.categories.length,
+            itemBuilder: (context, index) {
+              final category = controller.categories[index];
+              return Obx(() {
+                final isSelected = category == controller.selectedCategory.value;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => controller.setSelectedCategory(category),
+                      borderRadius: BorderRadius.circular(25),
+                      splashColor: controller.getCategoryColor(category).withOpacity(0.3),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? controller.getCategoryColor(category)
+                              : isDark ? Colors.grey[800] : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(25),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: controller.getCategoryColor(category).withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                controller.getCategoryIcon(category),
+                                size: 18,
+                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.grey.shade700),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                category,
+                                style: TextStyle(
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.grey.shade700),
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              });
+            },
+          ),
+        ),
+        // Divider
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[300]),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = Get.isRegistered<ServiceRecommendationController>()
         ? Get.find<ServiceRecommendationController>()
         : Get.put(ServiceRecommendationController());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: CustomAppBar(
+      backgroundColor: isDark ? Colors.grey[900] : Colors.grey[50],
+      appBar: BottomNavScreenHeader(
         title: 'Station Services',
-        elevation: 0,
-        backgroundColor: Colors.white,
       ),
       body: Column(
         children: [
@@ -28,7 +168,7 @@ class ServiceRecommendationScreen extends StatelessWidget {
           
           // Category Filter
           Obx(() => controller.selectedStation.value.isNotEmpty
-              ? _buildCategoryFilter(controller)
+              ? ServiceRecommendationScreen._buildCategoryFilter(controller, context)
               : const SizedBox.shrink()
           ),
           
@@ -70,12 +210,36 @@ class ServiceRecommendationScreen extends StatelessWidget {
               
               // Show station list if no station is selected
               if (controller.selectedStation.value.isEmpty) {
+                // Normalize and deduplicate station names to prevent redundancy
+                final stationMap = <String, StationInfo>{};
+                
+                // First pass: collect all stations with services and normalize their names
+                controller.servicesByStation.forEach((stationName, services) {
+                  if (services.isNotEmpty) {
+                    // Normalize the station name (convert to title case and remove suffixes)
+                    final normalizedName = _normalizeStationName(stationName);
+                    
+                    // If we already have this station, combine the services
+                    if (stationMap.containsKey(normalizedName)) {
+                      stationMap[normalizedName]!.services.addAll(services);
+                    } else {
+                      stationMap[normalizedName] = StationInfo(
+                        originalName: stationName,
+                        normalizedName: normalizedName,
+                        services: List.from(services),
+                      );
+                    }
+                  }
+                });
+                
+                final stationsWithServices = stationMap.values.toList();
+                
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: controller.servicesByStation.length,
+                  itemCount: stationsWithServices.length,
                   itemBuilder: (context, index) {
-                    final station = controller.servicesByStation.keys.elementAt(index);
-                    final services = controller.servicesByStation[station] ?? [];
+                    final stationInfo = stationsWithServices[index];
+                    final services = stationInfo.services;
                     
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -87,11 +251,11 @@ class ServiceRecommendationScreen extends StatelessWidget {
                       ),
                       child: InkWell(
                         onTap: () {
-                          controller.setSelectedStation(station);
+                          controller.setSelectedStation(stationInfo.originalName);
                           // Use pushReplacement instead of push to ensure proper back navigation
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => StationServicesDetailScreen(station: station),
+                              builder: (context) => StationServicesDetailScreen(station: stationInfo.normalizedName),
                             ),
                           );
                         },
@@ -118,7 +282,7 @@ class ServiceRecommendationScreen extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      station,
+                                      stationInfo.normalizedName,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                         fontSize: 16,
@@ -142,7 +306,7 @@ class ServiceRecommendationScreen extends StatelessWidget {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                '${services.length} services',
+                                                '${stationInfo.serviceCount} services',
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   color: Colors.green.shade700,
@@ -216,6 +380,7 @@ class ServiceRecommendationScreen extends StatelessWidget {
 
   // Build station selector with enhanced UI
   Widget _buildStationSelector(BuildContext context, ServiceRecommendationController controller) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Obx(() {
       // Debug output
       print('Building station selector with ${controller.stations.length} stations');
@@ -236,7 +401,10 @@ class ServiceRecommendationScreen extends StatelessWidget {
           value: station.name,
           child: Text(
             station.name,
-            style: const TextStyle(fontSize: 16),
+            style: TextStyle(
+              fontSize: 16,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
           ),
         );
       }).toList();
@@ -276,7 +444,10 @@ class ServiceRecommendationScreen extends StatelessWidget {
           ),
           child: DropdownButtonFormField<String>(
             value: controller.selectedStation.value.isEmpty ? null : controller.selectedStation.value,
-            hint: const Text('Select a station'),
+            hint: Text(
+              'Select a station',
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+            ),
             decoration: InputDecoration(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               border: OutlineInputBorder(
@@ -284,9 +455,17 @@ class ServiceRecommendationScreen extends StatelessWidget {
                 borderSide: BorderSide.none,
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: isDark ? Colors.grey[800] : Colors.white,
             ),
-            icon: const Icon(Icons.keyboard_arrow_down),
+            dropdownColor: isDark ? Colors.grey[850] : Colors.white,
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black87,
+              fontSize: 16,
+            ),
+            icon: Icon(
+              Icons.keyboard_arrow_down,
+              color: isDark ? Colors.white70 : Colors.black54,
+            ),
             iconSize: 24,
             isExpanded: true,
             onChanged: (String? newValue) {
@@ -321,7 +500,9 @@ class ServiceRecommendationScreen extends StatelessWidget {
   }
 
   // Build category filter with enhanced UI and horizontal scrolling
-  Widget _buildCategoryFilter(ServiceRecommendationController controller) {
+  static Widget _buildCategoryFilter(ServiceRecommendationController controller, BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -336,17 +517,20 @@ class ServiceRecommendationScreen extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: Colors.grey[800],
+                  color: isDark ? Colors.white70 : Colors.grey[800],
                 ),
               ),
               // Indicator to show scrollable
               Row(
                 children: [
-                  Icon(Icons.swipe, size: 14, color: Colors.grey[600]),
+                  Icon(Icons.swipe, size: 14, color: isDark ? Colors.white54 : Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
                     'Scroll for more',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    style: TextStyle(
+                      fontSize: 12, 
+                      color: isDark ? Colors.white54 : Colors.grey[600]
+                    ),
                   ),
                 ],
               ),
@@ -446,17 +630,21 @@ class StationServicesDetailScreen extends StatelessWidget {
         return true;
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(station),
-          centerTitle: true,
+        appBar: BottomNavScreenHeader(
+          title: station,
+          showBackButton: true,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () {
-              // Just clear the selected station without reloading everything
+              // Clear the selected station and category
               controller.selectedStation.value = '';
               controller.selectedCategory.value = 'All';
-              Navigator.of(context).pop();
+              // Navigate back
+              if (Navigator.canPop(context)) {
+                Navigator.of(context).pop();
+              }
             },
+            tooltip: 'Back to stations',
           ),
         ),
         body: Column(
@@ -520,65 +708,7 @@ class StationServicesDetailScreen extends StatelessWidget {
           ),
           
           // Category filter
-          SizedBox(
-            height: 60,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: List.generate(controller.categories.length, (index) {
-                    final category = controller.categories[index];
-                    return Obx(() {
-                      final isSelected = category == controller.selectedCategory.value;
-                      return GestureDetector(
-                        onTap: () => controller.setSelectedCategory(category),
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 12),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? controller.getCategoryColor(category)
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(25),
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: controller.getCategoryColor(category).withOpacity(0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                controller.getCategoryIcon(category),
-                                size: 18,
-                                color: isSelected ? Colors.white : Colors.grey.shade700,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                category,
-                                style: TextStyle(
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                  color: isSelected ? Colors.white : Colors.grey.shade700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    });
-                  }),
-                ),
-              ),
-            ),
-          ),
+          ServiceRecommendationScreen._buildCategoryFilter(controller, context),
           
           // Services list
           Expanded(
@@ -665,15 +795,20 @@ class SimpleServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final categoryColor = controller.getCategoryColor(service.category);
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      shadowColor: Colors.black.withOpacity(0.1),
+      shadowColor: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.1),
+      color: isDark ? Colors.grey[850] : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(
+          color: isDark ? Colors.grey[800]! : Colors.grey.shade200,
+          width: 1,
+        ),
       ),
       child: InkWell(
         onTap: () {
@@ -733,9 +868,10 @@ class SimpleServiceCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             service.title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 16,
+                              color: isDark ? Colors.white : Colors.black87,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -798,7 +934,7 @@ class SimpleServiceCard extends StatelessWidget {
                           '${service.distanceFromStation} m from ${service.stationName}',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[600],
+                            color: isDark ? Colors.white70 : Colors.grey[600],
                           ),
                         ),
                       ],
@@ -825,7 +961,7 @@ class ServiceDetailScreen extends StatelessWidget {
     final categoryColor = controller.getCategoryColor(service.category);
     
     return Scaffold(
-      appBar: CustomAppBar(
+      appBar: BottomNavScreenHeader(
         title: service.title,
         showBackButton: true,
       ),

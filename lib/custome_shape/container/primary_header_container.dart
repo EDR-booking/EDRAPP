@@ -10,15 +10,14 @@ class TPrimaryHeaderContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipPath(
-      clipper: TCurvedShape(),
-      child: Container(
-        color: TColors.primary,
-
-        child: SizedBox(
-          height: 150,
-          width: double.infinity,
+    // Remove the curved clipper and increase height to eliminate the gap
+    return Container(
+      color: TColors.primary,
+      child: SizedBox(
+        height: 180, // Increased height to ensure it reaches the progress bar
+        width: double.infinity,
           child: Stack(
+            alignment: Alignment.center, // Center all elements in the stack
             children: [
               Positioned(
                 top: -10,
@@ -38,8 +37,8 @@ class TPrimaryHeaderContainer extends StatelessWidget {
               child,
             ],
           ),
-        ),
       ),
     );
+  
   }
 }
